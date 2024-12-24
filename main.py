@@ -23,11 +23,11 @@ def scrape_live_trading_data():
                 cells[0].text.strip(),  # SN
                 cells[1].text.strip(),  # Symbol
                 cells[2].text.strip(),  # LTP
-                cells[4].text.strip(),  # Change %
+                cells[4].text.strip(),  # Change%
                 cells[6].text.strip(),  # Day High
                 cells[7].text.strip(),  # Day Low
-                cells[9].text.strip(),  # Volume
-                cells[8].text.strip()   # Previous Close
+                cells[8].text.strip(),  # Volume
+                cells[9].text.strip()   # Previous Close
             ])
     return table_data
 
