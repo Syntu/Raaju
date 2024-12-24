@@ -11,77 +11,78 @@ FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 
-# Function to scrape today's share price summary (for Symbol)
-def scrape_today_share_price():
-    url = "https://www.sharesansar.com/today-share-price"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "SN": cells[0].text.strip(),
-                "Symbol": cells[1].text.strip(),  # Symbol from today's share price
-                "LTP": cells[2].text.strip(),
-                "Change%": cells[4].text.strip(),
-                "Day High": cells[6].text.strip(),
-                "Day Low": cells[7].text.strip(),
-                "Previous Close": cells[9].text.strip(),
-                "Volume": cells[8].text.strip()
-            })
-    return data
-
-# Function to scrape live trading data (for other columns)
+# Function to scrape live trading data
 def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
     rows = soup.find_all("tr")
-    data = []
+    live_data = {}
     for row in rows:
         cells = row.find_all("td")
         if len(cells) > 1:
-            data.append({
-                "SN": cells[0].text.strip(),
-                "Symbol": cells[1].text.strip(),
+            symbol = cells[1].text.strip()
+            live_data[symbol] = {
                 "LTP": cells[2].text.strip(),
                 "Change%": cells[4].text.strip(),
                 "Day High": cells[6].text.strip(),
                 "Day Low": cells[7].text.strip(),
                 "Previous Close": cells[9].text.strip(),
-                "Volume": cells[8].text.strip()
-            })
-    return data
+                "Volume": cells[8].text.strip(),
+            }
+    return live_data
 
-# Function to scrape today's share price summary
-def scrape_today_share_price_summary():
+# Function to scrape today's share price data
+def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    table_data = soup.find_all("td")
-    return {
-        "Turnover": table_data[10].text.strip(),
-        "52 Week High": table_data[19].text.strip(),
-        "52 Week Low": table_data[20].text.strip()
-    }
+    rows = soup.find_all("tr")
+    today_data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            today_data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip(),
+                "52 Week High": cells[19].text.strip(),
+                "52 Week Low": cells[20].text.strip(),
+            })
+    return today_data
 
-# Function to merge the data into one unified format
-def merge_data(live_data, today_data, summary_data):
-    # Create a dictionary for easy lookup
-    symbol_data = {row["Symbol"]: row for row in today_data}
-    for live_row in live_data:
-        symbol = live_row["Symbol"]
-        if symbol in symbol_data:
-            live_row.update(symbol_data[symbol])  # Add 'Today's Share Price' data
-        # Add common fields from summary data
-        live_row["Turnover"] = summary_data["Turnover"]
-        live_row["52 Week High"] = summary_data["52 Week High"]
-        live_row["52 Week Low"] = summary_data["52 Week Low"]
-    return live_data
+# Function to merge data based on Symbol
+def merge_data(today_data, live_data):
+    merged_data = []
+    for row in today_data:
+        symbol = row["Symbol"]
+        if symbol in live_data:
+            merged_data.append({
+                "SN": row["SN"],
+                "Symbol": symbol,
+                **live_data[symbol],
+                "Turnover": row["Turnover"],
+                "52 Week High": row["52 Week High"],
+                "52 Week Low": row["52 Week Low"],
+            })
+        else:
+            # Use Today's Share Price data if not found in Live Trading
+            merged_data.append({
+                "SN": row["SN"],
+                "Symbol": symbol,
+                "LTP": "N/A",
+                "Change%": "N/A",
+                "Day High": "N/A",
+                "Day Low": "N/A",
+                "Previous Close": "N/A",
+                "Volume": "N/A",
+                "Turnover": row["Turnover"],
+                "52 Week High": row["52 Week High"],
+                "52 Week Low": row["52 Week Low"],
+            })
+    return merged_data
 
-# Function to generate the HTML table
+# Function to generate HTML table
 def generate_html(merged_data):
     html = """
     <!DOCTYPE html>
@@ -102,120 +103,80 @@ def generate_html(merged_data):
             th, td {
                 border: 1px solid #ddd;
                 padding: 8px;
+                text-align: center;
             }
             th {
                 background-color: brown;
-                text-align: center;
+                color: white;
                 position: sticky;
                 top: 0;
                 z-index: 1;
-                cursor: pointer;
             }
             td {
                 text-align: center;
             }
+            .positive { background-color: lightgreen; }
+            .negative { background-color: lightcoral; }
+            .neutral { background-color: lightblue; }
             .table-container {
                 max-height: 80vh;
-                overflow-y: auto;
+                overflow: auto;
             }
             h1 {
                 text-align: center;
                 margin-top: 20px;
-            }
-            .positive {
-                background-color: lightgreen;
-            }
-            .negative {
-                background-color: lightcoral;
-            }
-            .zero {
-                background-color: lightblue;
-            }
-            .freeze {
-                position: sticky;
-                left: 0;
-                background-color: white;
-                z-index: 2;
             }
         </style>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
         <div class="table-container">
-            <table id="stock-table">
+            <table>
                 <thead>
                     <tr>
-                        <th onclick="sortTable(0)">SN</th>
-                        <th class="freeze" onclick="sortTable(1)">Symbol</th>
-                        <th onclick="sortTable(2)">LTP</th>
-                        <th onclick="sortTable(3)">Change%</th>
-                        <th onclick="sortTable(4)">Day High</th>
-                        <th onclick="sortTable(5)">Day Low</th>
-                        <th onclick="sortTable(6)">Previous Close</th>
-                        <th onclick="sortTable(7)">Volume</th>
-                        <th onclick="sortTable(8)">Turnover</th>
-                        <th onclick="sortTable(9)">52 Week High</th>
-                        <th onclick="sortTable(10)">52 Week Low</th>
+                        <th>SN</th>
+                        <th>Symbol</th>
+                        <th>LTP</th>
+                        <th>Change%</th>
+                        <th>Day High</th>
+                        <th>Day Low</th>
+                        <th>Previous Close</th>
+                        <th>Volume</th>
+                        <th>Turnover</th>
+                        <th>52 Week High</th>
+                        <th>52 Week Low</th>
                     </tr>
                 </thead>
                 <tbody>
     """
     for row in merged_data:
-        # Assigning color based on Change% value
-        change_percent_class = "zero"
-        try:
-            change_percent = float(row["Change%"].replace("%", "").replace(",", ""))
-            if change_percent > 0:
-                change_percent_class = "positive"
-            elif change_percent < 0:
-                change_percent_class = "negative"
-        except ValueError:
-            pass
+        change_class = "neutral"
+        if row["Change%"] != "N/A":
+            change = float(row["Change%"].replace("%", "").replace(",", ""))
+            if change > 0:
+                change_class = "positive"
+            elif change < 0:
+                change_class = "negative"
 
-        # HTML Row for each stock
-        html += f"<tr class='{change_percent_class}'>" + "".join(f"<td>{row[col]}</td>" for col in row if col != "Symbol") + "</tr>"
+        html += f"""
+        <tr>
+            <td>{row["SN"]}</td>
+            <td>{row["Symbol"]}</td>
+            <td>{row["LTP"]}</td>
+            <td class="{change_class}">{row["Change%"]}</td>
+            <td>{row["Day High"]}</td>
+            <td>{row["Day Low"]}</td>
+            <td>{row["Previous Close"]}</td>
+            <td>{row["Volume"]}</td>
+            <td>{row["Turnover"]}</td>
+            <td>{row["52 Week High"]}</td>
+            <td>{row["52 Week Low"]}</td>
+        </tr>
+        """
     html += """
                 </tbody>
             </table>
         </div>
-        <script>
-            function sortTable(n) {
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("stock-table");
-                switching = true;
-                dir = "asc"; // Set the sorting direction to ascending
-                while (switching) {
-                    switching = false;
-                    rows = table.rows;
-                    for (i = 1; i < (rows.length - 1); i++) {
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-                        if (dir == "asc") {
-                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        } else if (dir == "desc") {
-                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (shouldSwitch) {
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount++;
-                    } else {
-                        if (switchcount == 0 && dir == "asc") {
-                            dir = "desc";
-                            switching = true;
-                        }
-                    }
-                }
-            }
-        </script>
     </body>
     </html>
     """
@@ -233,10 +194,9 @@ def upload_to_ftp(html_content):
 # Function to refresh data
 def refresh_data():
     print("Fetching data...")
-    live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
-    summary_data = scrape_today_share_price_summary()
-    merged_data = merge_data(live_data, today_data, summary_data)
+    live_data = scrape_live_trading()
+    merged_data = merge_data(today_data, live_data)
     print("Generating HTML...")
     html_content = generate_html(merged_data)
     print("Uploading to FTP...")
@@ -258,3 +218,4 @@ try:
         pass
 except (KeyboardInterrupt, SystemExit):
     print("Stopping script...")
+    scheduler.shutdown()
