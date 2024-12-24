@@ -4,6 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -95,95 +96,57 @@ def merge_data(live_data, today_data):
 
 # Function to generate HTML
 def generate_html(data):
-    html = """
+    updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>NEPSE Live Data</title>
         <style>
-            body {font-family: Arial, sans-serif; margin: 20px;}
-            table {width: 100%; border-collapse: collapse; margin-top: 20px;}
-            th, td {border: 1px solid #ddd; padding: 8px; text-align: center;}
-            th {background-color: #8B4513; color: white; cursor: pointer; position: sticky; top: 0;}
-            tr:hover {background-color: #f1f1f1;}
-            td {cursor: pointer;}
-            .highlight {background-color: #ffff99 !important;}
-            .light-red {background-color: #FFCCCB;}
-            .light-green {background-color: #D4EDDA;}
-            .light-blue {background-color: #CCE5FF;}
-            .header {display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;}
-            .developer {font-weight: bold; color: #8B4513;}
+            body {{font-family: Arial, sans-serif; margin: 20px;}}
+            table {{width: 100%; border-collapse: collapse; margin-top: 20px;}}
+            th, td {{border: 1px solid #ddd; padding: 8px; text-align: center;}}
+            th {{background-color: #8B4513; color: white; cursor: pointer; position: sticky; top: 0;}}
+            tr:hover {{background-color: #f1f1f1;}}
+            td {{cursor: pointer;}}
+            .header {{text-align: center; font-weight: bold; font-size: 24px; margin-bottom: 20px;}}
+            .welcome {{text-align: center; font-size: 18px; margin-top: 40px;}}
+            .footer {{display: flex; justify-content: space-between; margin-top: 20px; font-size: 14px;}}
+            .footer a {{text-decoration: none; color: #8B4513; font-weight: bold;}}
+            .highlight {{background-color: #ffff99 !important;}}
+            .light-red {{background-color: #FFCCCB;}}
+            .light-green {{background-color: #D4EDDA;}}
+            .light-blue {{background-color: #CCE5FF;}}
         </style>
         <script>
-            // Sorting function
-            function sortTable(n) {
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("dataTable");
-                switching = true;
-                dir = "asc"; 
-                while (switching) {
-                    switching = false;
-                    rows = table.rows;
-                    for (i = 1; i < (rows.length - 1); i++) {
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-                        if (dir == "asc") {
-                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        } else if (dir == "desc") {
-                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (shouldSwitch) {
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount++;
-                    } else {
-                        if (switchcount == 0 && dir == "asc") {
-                            dir = "desc";
-                            switching = true;
-                        }
-                    }
-                }
-            }
-
             // Row highlight function
-            function highlightRow(row) {
+            function highlightRow(row) {{
                 var rows = document.getElementsByTagName("tr");
-                for (var i = 0; i < rows.length; i++) {
+                for (var i = 0; i < rows.length; i++) {{
                     rows[i].classList.remove("highlight");
-                }
+                }}
                 row.classList.add("highlight");
-            }
+            }}
         </script>
     </head>
     <body>
-        <div class="header">
-            <h1>NEPSE Live Data</h1>
-            <span class="developer">Developed By: Syntoo</span>
-        </div>
+        <div class="header">NEPSE Live Data</div>
         <table id="dataTable">
             <thead>
                 <tr>
-                    <th onclick="sortTable(0)">SN</th>
-                    <th onclick="sortTable(1)">Symbol</th>
-                    <th onclick="sortTable(2)">LTP</th>
-                    <th onclick="sortTable(3)">Change%</th>
-                    <th onclick="sortTable(4)">Day High</th>
-                    <th onclick="sortTable(5)">Day Low</th>
-                    <th onclick="sortTable(6)">Previous Close</th>
-                    <th onclick="sortTable(7)">Volume</th>
-                    <th onclick="sortTable(8)">Turnover</th>
-                    <th onclick="sortTable(9)">52 Week High</th>
-                    <th onclick="sortTable(10)">52 Week Low</th>
-                    <th onclick="sortTable(11)">Down From High (%)</th>
-                    <th onclick="sortTable(12)">Up From Low (%)</th>
+                    <th>SN</th>
+                    <th>Symbol</th>
+                    <th>LTP</th>
+                    <th>Change%</th>
+                    <th>Day High</th>
+                    <th>Day Low</th>
+                    <th>Previous Close</th>
+                    <th>Volume</th>
+                    <th>Turnover</th>
+                    <th>52 Week High</th>
+                    <th>52 Week Low</th>
+                    <th>Down From High (%)</th>
+                    <th>Up From Low (%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -208,15 +171,20 @@ def generate_html(data):
                 <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
-    html += """
+    html += f"""
             </tbody>
         </table>
+        <div class="welcome">Welcome 🙏 to NEPSE data Website.</div>
+        <div class="footer">
+            <div>Updated on: {updated_time}</div>
+            <div><a href="https://www.facebook.com/srajghimire" target="_blank">Developed By : Syntoo</a></div>
+        </div>
     </body>
     </html>
     """
     return html
 
-# Upload to FTP
+# Function to upload the HTML to FTP
 def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
@@ -225,7 +193,7 @@ def upload_to_ftp(html_content):
         with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
 
-# Refresh Data
+# Refresh data function
 def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
@@ -233,15 +201,15 @@ def refresh_data():
     html_content = generate_html(merged_data)
     upload_to_ftp(html_content)
 
-# Scheduler
+# Schedule the data refresh
 scheduler = BackgroundScheduler()
 scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
-# Initial Data Refresh
+# Initial refresh
 refresh_data()
 
-# Keep Running
+# Keep running
 try:
     while True:
         pass
