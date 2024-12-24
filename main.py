@@ -92,19 +92,20 @@ def generate_html(main_table):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to Syntoo's NEPSE Live Data</title>
+        <title>NEPSE Live Data</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
             h1, h2 {{ text-align: center; margin: 10px; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
-            th {{ background-color: #8B4513; color: white; position: sticky; top: 0; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; cursor: pointer; }}
+            th {{ background-color: #8B4513; color: white; }}
             tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            tr:hover {{ background-color: #fffbcc; }}
+            .highlight {{ background-color: #fffbcc !important; }}
+            .header {{ position: absolute; top: 0; right: 10px; padding: 10px; }}
             .light-red {{ background-color: #FFCCCB; }}
             .light-green {{ background-color: #D4EDDA; }}
             .light-blue {{ background-color: #CCE5FF; }}
-            .footer {{ text-align: right; padding: 10px; font-size: 12px; color: gray; }}
-            .footer a {{ color: inherit; text-decoration: none; }}
             @media (max-width: 768px) {{
                 table {{ font-size: 12px; }}
                 th, td {{ padding: 5px; }}
@@ -114,23 +115,60 @@ def generate_html(main_table):
                 th, td {{ padding: 3px; }}
             }}
         </style>
+        <script>
+            function sortTable(n) {{
+                var table = document.getElementById("dataTable");
+                var rows = Array.from(table.rows).slice(1);
+                var ascending = !table.rows[1].getAttribute("data-asc");
+                rows.sort(function(a, b) {{
+                    var x = a.cells[n].innerText;
+                    var y = b.cells[n].innerText;
+                    if (!isNaN(parseFloat(x)) && !isNaN(parseFloat(y))) {{
+                        return ascending ? parseFloat(x) - parseFloat(y) : parseFloat(y) - parseFloat(x);
+                    }} else {{
+                        return ascending ? x.localeCompare(y) : y.localeCompare(x);
+                    }}
+                }});
+                table.tBodies[0].append(...rows);
+                Array.from(table.rows).forEach(row => row.setAttribute("data-asc", ascending));
+            }}
+            function highlightRow(row) {{
+                Array.from(document.querySelectorAll(".highlight")).forEach(el => el.classList.remove("highlight"));
+                row.classList.add("highlight");
+            }}
+        </script>
     </head>
     <body>
+        <div class="header">
+            Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a>
+        </div>
         <h1>NEPSE Live Data</h1>
         <h2>Updated On: {updated_time}</h2>
-        <table>
-            <tr>
-                <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th><th>Day High</th>
-                <th>Day Low</th><th>Previous Close</th><th>Volume</th>
-                <th>Turnover</th><th>52 Week High</th><th>52 Week Low</th>
-                <th>Down From High (%)</th><th>Up From Low (%)</th>
-            </tr>
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">SN</th>
+                    <th onclick="sortTable(1)">Symbol</th>
+                    <th onclick="sortTable(2)">LTP</th>
+                    <th onclick="sortTable(3)">Change%</th>
+                    <th onclick="sortTable(4)">Day High</th>
+                    <th onclick="sortTable(5)">Day Low</th>
+                    <th onclick="sortTable(6)">Previous Close</th>
+                    <th onclick="sortTable(7)">Volume</th>
+                    <th onclick="sortTable(8)">Turnover</th>
+                    <th onclick="sortTable(9)">52 Week High</th>
+                    <th onclick="sortTable(10)">52 Week Low</th>
+                    <th onclick="sortTable(11)">Down From High (%)</th>
+                    <th onclick="sortTable(12)">Up From Low (%)</th>
+                </tr>
+            </thead>
+            <tbody>
     """
     for row in main_table:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
-            <tr>
+            <tr onclick="highlightRow(this)">
                 <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
@@ -140,10 +178,8 @@ def generate_html(main_table):
             </tr>
         """
     html += """
+            </tbody>
         </table>
-        <div class="footer">
-            Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a>
-        </div>
     </body>
     </html>
     """
