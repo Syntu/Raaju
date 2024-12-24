@@ -1,180 +1,243 @@
 import os
+import ftplib
+from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask
-from apscheduler.schedulers.background import BackgroundScheduler
-from ftplib import FTP
 from dotenv import load_dotenv
 
-# Flask App
-app = Flask(__name__)
-
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
-
-# FTP Configuration from .env
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 
-# Global HTML content
-html_content = ""
-
-# Function to scrape today's share price data
+# Function to scrape today's share price summary (for Symbol)
 def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
     rows = soup.find_all("tr")
-    table_data = []
+    data = []
     for row in rows:
         cells = row.find_all("td")
         if len(cells) > 1:
-            table_data.append([cell.text.strip() for cell in cells])
-    return table_data
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),  # Symbol from today's share price
+                "LTP": cells[2].text.strip(),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip(),
+                "Day Low": cells[7].text.strip(),
+                "Previous Close": cells[9].text.strip(),
+                "Volume": cells[8].text.strip()
+            })
+    return data
 
-# Function to scrape live trading data
+# Function to scrape live trading data (for other columns)
 def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
     rows = soup.find_all("tr")
-    live_data = []
+    data = []
     for row in rows:
         cells = row.find_all("td")
         if len(cells) > 1:
-            live_data.append([cell.text.strip() for cell in cells])
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip(),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip(),
+                "Day Low": cells[7].text.strip(),
+                "Previous Close": cells[9].text.strip(),
+                "Volume": cells[8].text.strip()
+            })
+    return data
+
+# Function to scrape today's share price summary
+def scrape_today_share_price_summary():
+    url = "https://www.sharesansar.com/today-share-price"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    table_data = soup.find_all("td")
+    return {
+        "Turnover": table_data[10].text.strip(),
+        "52 Week High": table_data[19].text.strip(),
+        "52 Week Low": table_data[20].text.strip()
+    }
+
+# Function to calculate additional columns and merge data
+def merge_data(live_data, today_data, summary_data):
+    for i, row in enumerate(live_data):
+        # Fetch Symbol from 'Today's Share Price'
+        row["Symbol"] = today_data[i]["Symbol"] if i < len(today_data) else row["Symbol"]
+
+        # Fetch other data from 'Live Trading'
+        ltp = float(row["LTP"].replace(",", "")) if row["LTP"] else 0
+        high = float(summary_data["52 Week High"].replace(",", ""))
+        low = float(summary_data["52 Week Low"].replace(",", ""))
+
+        row["Turnover"] = summary_data["Turnover"]
+        row["52 Week High"] = summary_data["52 Week High"]
+        row["52 Week Low"] = summary_data["52 Week Low"]
+        row["Down From High"] = f"{((high - ltp) / high * 100):.2f}%" if high else "N/A"
+        row["Up From Low"] = f"{((ltp - low) / low * 100):.2f}%" if low else "N/A"
     return live_data
 
 # Function to generate HTML table
-def generate_html(today_data, live_data):
+def generate_html(merged_data):
     html = """
     <!DOCTYPE html>
     <html>
     <head>
         <title>NEPSE Live Data</title>
         <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+            }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                overflow-x: auto;
-                display: block;
+                margin-top: 20px;
             }
             th, td {
                 border: 1px solid #ddd;
                 padding: 8px;
-                text-align: center;
             }
             th {
-                background-color: #f2f2f2;
+                background-color: brown;
+                text-align: center;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                cursor: pointer;
+            }
+            td {
+                text-align: center;
+            }
+            .table-container {
+                max-height: 80vh;
+                overflow-y: auto;
+            }
+            h1 {
+                text-align: center;
+                margin-top: 20px;
+            }
+            .positive {
+                background-color: lightgreen;
+            }
+            .negative {
+                background-color: lightcoral;
+            }
+            .zero {
+                background-color: lightblue;
+            }
+            .freeze {
+                position: sticky;
+                left: 0;
+                background-color: white;
+                z-index: 2;
             }
         </style>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <table>
-            <tr>
-                <th>Symbol</th>
-                <th>LTP</th>
-                <th>Change%</th>
-                <th>Day High</th>
-                <th>Day Low</th>
-                <th>Previous Close</th>
-                <th>Volume</th>
-                <th>Turnover</th>
-                <th>52 Week High</th>
-                <th>52 Week Low</th>
-                <th>Down From High (%)</th>
-                <th>Up From Low (%)</th>
-            </tr>
+        <div class="table-container">
+            <table id="stock-table">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">SN</th>
+                        <th class="freeze" onclick="sortTable(1)">Symbol</th>
+                        <th onclick="sortTable(2)">LTP</th>
+                        <th onclick="sortTable(3)">Change%</th>
+                        <th onclick="sortTable(4)">Day High</th>
+                        <th onclick="sortTable(5)">Day Low</th>
+                        <th onclick="sortTable(6)">Previous Close</th>
+                        <th onclick="sortTable(7)">Volume</th>
+                        <th onclick="sortTable(8)">Turnover</th>
+                        <th onclick="sortTable(9)">52 Week High</th>
+                        <th onclick="sortTable(10)">52 Week Low</th>
+                        <th onclick="sortTable(11)">Down From High</th>
+                        <th onclick="sortTable(12)">Up From Low</th>
+                    </tr>
+                </thead>
+                <tbody>
     """
-    # Match and add data from today's share price and live trading
-    for today, live in zip(today_data, live_data):
-        symbol = live[1]  # Assuming symbol is in column 2
-        ltp = live[2]  # LTP is in column 3
-        change = live[4]  # Change% is in column 5
-        day_high = live[6]  # Day High is in column 7
-        day_low = live[7]  # Day Low is in column 8
-        previous_close = live[9]  # Previous Close is in column 10
-        volume = live[8]  # Volume is in column 9
-        turnover = today[10]  # Turnover from today's share price
-        week_high = today[19]  # 52 Week High from today's share price
-        week_low = today[20]  # 52 Week Low from today's share price
-        
-        # Calculate Down From High and Up From Low
-        down_from_high = ((float(week_high) - float(ltp)) / float(week_high)) * 100
-        up_from_low = ((float(ltp) - float(week_low)) / float(week_low)) * 100
+    for row in merged_data:
+        change_percent_class = "zero"
+        try:
+            change_percent = float(row["Change%"].replace("%", "").replace(",", ""))
+            if change_percent > 0:
+                change_percent_class = "positive"
+            elif change_percent < 0:
+                change_percent_class = "negative"
+        except ValueError:
+            pass
 
-        html += f"""
-            <tr>
-                <td>{symbol}</td>
-                <td>{ltp}</td>
-                <td>{change}</td>
-                <td>{day_high}</td>
-                <td>{day_low}</td>
-                <td>{previous_close}</td>
-                <td>{volume}</td>
-                <td>{turnover}</td>
-                <td>{week_high}</td>
-                <td>{week_low}</td>
-                <td>{down_from_high:.2f}%</td>
-                <td>{up_from_low:.2f}%</td>
-            </tr>
-        """
-    
+        html += f"<tr class='{change_percent_class}'>" + "".join(f"<td>{row[col]}</td>" for col in row) + "</tr>"
     html += """
-        </table>
+                </tbody>
+            </table>
+        </div>
+        <script>
+            function sortTable(n) {
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("stock-table");
+                switching = true;
+                dir = "asc"; // Set the sorting direction to ascending
+                while (switching) {
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        if (dir == "asc") {
+                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (shouldSwitch) {
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    } else {
+                        if (switchcount == 0 && dir == "asc") {
+                            dir = "desc";
+                            switching = true;
+                        }
+                    }
+                }
+            }
+        </script>
     </body>
     </html>
     """
     return html
 
-# Function to refresh HTML content
-def refresh_html():
-    global html_content
-    print("Scraping data...")
-    today_data = scrape_today_share_price()
+# Function to upload HTML to FTP server
+def upload_to_ftp(html_content):
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")  # Change to the correct directory if necessary
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
+
+# Function to refresh data
+def refresh_data():
+    print("Fetching data...")
     live_data = scrape_live_trading()
-    print("Generating HTML...")
-    html_content = generate_html(today_data, live_data)
-    print("HTML updated!")
-    
-    # FTP Upload
-    upload_to_ftp(html_content)
-
-# FTP Upload Function
-def upload_to_ftp(content):
-    try:
-        print("Connecting to FTP...")
-        ftp = FTP(FTP_HOST)
-        ftp.login(FTP_USER, FTP_PASS)
-        ftp.cwd('/public_html')  # Ensure you set the correct directory in your FTP
-        with open('index.html', 'w') as file:
-            file.write(content)
-        
-        # Upload the file to FTP
-        with open('index.html', 'rb') as file:
-            ftp.storbinary('STOR index.html', file)
-        
-        print("File uploaded to FTP successfully!")
-        ftp.quit()
-    except Exception as e:
-        print(f"FTP upload failed: {e}")
-
-# Define Flask route
-@app.route("/")
-def home():
-    return html_content or "<h1>Loading data...</h1>"
-
-# Initialize scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_html, "interval", minutes=5)
-scheduler.start()
-
-# Refresh data initially
-refresh_html()
-
-# Start the server
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Default port 5000
-    app.run(host="0.0.0.0", port=port)
+    today_data = scrape_today_share_price()
+    summary_data = scrape_today_share_price_summary()
+    merged_data =
