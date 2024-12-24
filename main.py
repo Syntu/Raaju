@@ -1,10 +1,13 @@
 import os
-from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from bs4 import BeautifulSoup
+from ftplib import FTP
 
-app = Flask(__name__)
+# FTP Credentials
+FTP_HOST = "ftpupload.net"
+FTP_USER = "if0_37758998"
+FTP_PASS = "VO7kHdsofB1QtS"
 
 # Global HTML content
 html_content = ""
@@ -136,8 +139,8 @@ def generate_html(data, summary, derived_data):
     """
     return html
 
-# Function to refresh HTML content
-def refresh_html():
+# Function to refresh HTML content and upload to FTP server
+def refresh_and_upload():
     global html_content
     print("Scraping data...")
     live_data = scrape_live_trading_data()
@@ -145,22 +148,28 @@ def refresh_html():
     derived_data = calculate_derived_data(live_data, summary)
     print("Generating HTML...")
     html_content = generate_html(live_data, summary, derived_data)
-    print("HTML updated!")
+    print("Uploading to FTP server...")
+    with open("index.html", "w") as file:
+        file.write(html_content)
+    upload_to_ftp("index.html")
+    print("HTML uploaded!")
 
-# Define Flask route
-@app.route("/")
-def home():
-    return html_content or "<h1>Loading data...</h1>"
+# Function to upload file to FTP server
+def upload_to_ftp(file_path):
+    try:
+        ftp = FTP(FTP_HOST)
+        ftp.login(FTP_USER, FTP_PASS)
+        with open(file_path, "rb") as file:
+            ftp.storbinary(f"STOR {os.path.basename(file_path)}", file)
+        ftp.quit()
+        print("File uploaded successfully!")
+    except Exception as e:
+        print(f"FTP upload failed: {e}")
 
 # Initialize scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_html, "interval", minutes=5)
+scheduler.add_job(refresh_and_upload, "interval", minutes=5)
 scheduler.start()
 
 # Refresh data initially
-refresh_html()
-
-# Start the server
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Default port 5000
-    app.run(host="0.0.0.0", port=port)
+refresh_and_upload()
