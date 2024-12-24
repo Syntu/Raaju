@@ -1,13 +1,19 @@
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask import Flask
+from ftplib import FTP
+from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
-from ftplib import FTP
 
-# FTP Credentials
-FTP_HOST = "ftpupload.net"
-FTP_USER = "if0_37758998"
-FTP_PASS = "VO7kHdsofB1QtS"
+# Load environment variables from .env file
+load_dotenv()
+
+FTP_HOST = os.getenv("FTP_HOST")
+FTP_USER = os.getenv("FTP_USER")
+FTP_PASS = os.getenv("FTP_PASS")
+
+app = Flask(__name__)
 
 # Global HTML content
 html_content = ""
@@ -21,7 +27,7 @@ def scrape_live_trading_data():
     table_data = []
     for row in rows:
         cells = row.find_all("td")
-        if len(cells) > 1:
+        if len(cells) >= 10:
             table_data.append([
                 cells[0].text.strip(),  # SN
                 cells[1].text.strip(),  # Symbol
@@ -29,46 +35,41 @@ def scrape_live_trading_data():
                 cells[4].text.strip(),  # Change%
                 cells[6].text.strip(),  # Day High
                 cells[7].text.strip(),  # Day Low
-                cells[8].text.strip(),  # Volume
-                cells[9].text.strip()   # Previous Close
+                cells[9].text.strip(),  # Previous Close
+                cells[8].text.strip()   # Volume
             ])
     return table_data
 
-# Function to scrape today's share price summary
-def scrape_today_share_price():
+# Function to scrape summary data
+def scrape_summary_data():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    cells = soup.find_all("td")
-    if len(cells) >= 21:
-        return {
-            "Turnover": cells[10].text.strip(),
-            "52_Week_High": cells[19].text.strip(),
-            "52_Week_Low": cells[20].text.strip(),
-        }
-    return {}
+    table_data = soup.find_all("td")
+    return {
+        "Turnover": table_data[10].text.strip() if len(table_data) > 10 else "N/A",
+        "52 Week High": table_data[19].text.strip() if len(table_data) > 19 else "N/A",
+        "52 Week Low": table_data[20].text.strip() if len(table_data) > 20 else "N/A",
+    }
 
-# Function to calculate derived values
-def calculate_derived_data(data, summary):
-    derived_data = []
-    for row in data:
+# Function to calculate additional columns
+def calculate_additional_data(table_data, summary_data):
+    updated_data = []
+    for row in table_data:
         try:
             ltp = float(row[2].replace(",", ""))
-            high = float(summary["52_Week_High"].replace(",", ""))
-            low = float(summary["52_Week_Low"].replace(",", ""))
-            down_from_high = round((high - ltp) / high * 100, 2)
-            up_from_low = round((ltp - low) / low * 100, 2)
-            derived_data.append({
-                "Symbol": row[1],
-                "Down_From_High": f"{down_from_high}%",
-                "Up_From_Low": f"{up_from_low}%"
-            })
+            high = float(summary_data["52 Week High"].replace(",", ""))
+            low = float(summary_data["52 Week Low"].replace(",", ""))
+            down_from_high = f"{((high - ltp) / high) * 100:.2f}%" if high else "N/A"
+            up_from_low = f"{((ltp - low) / low) * 100:.2f}%" if low else "N/A"
         except ValueError:
-            continue
-    return derived_data
+            down_from_high = "N/A"
+            up_from_low = "N/A"
+        updated_data.append(row + [down_from_high, up_from_low])
+    return updated_data
 
 # Function to generate HTML table
-def generate_html(data, summary, derived_data):
+def generate_html(table_data, summary_data):
     html = """
     <!DOCTYPE html>
     <html>
@@ -78,7 +79,6 @@ def generate_html(data, summary, derived_data):
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 20px;
             }
             th, td {
                 border: 1px solid #ddd;
@@ -95,7 +95,6 @@ def generate_html(data, summary, derived_data):
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Live Trading Data</h2>
         <table>
             <tr>
                 <th>SN</th>
@@ -106,70 +105,59 @@ def generate_html(data, summary, derived_data):
                 <th>Day Low</th>
                 <th>Previous Close</th>
                 <th>Volume</th>
+                <th>Down From High</th>
+                <th>Up From Low</th>
             </tr>
     """
-    for row in data:
+    for row in table_data:
         html += "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
-    
-    html += """
+    html += f"""
         </table>
-        <h2>Today's Summary</h2>
-        <table>
-            <tr><th>Turnover</th><th>52 Week High</th><th>52 Week Low</th></tr>
-            <tr>
-                <td>{turnover}</td>
-                <td>{high}</td>
-                <td>{low}</td>
-            </tr>
-        </table>
-        <h2>Derived Data</h2>
-        <table>
-            <tr><th>Symbol</th><th>Down From High</th><th>Up From Low</th></tr>
-    """.format(
-        turnover=summary.get("Turnover", "N/A"),
-        high=summary.get("52_Week_High", "N/A"),
-        low=summary.get("52_Week_Low", "N/A"),
-    )
-    for row in derived_data:
-        html += f"<tr><td>{row['Symbol']}</td><td>{row['Down_From_High']}</td><td>{row['Up_From_Low']}</td></tr>"
-    html += """
-        </table>
+        <h2>Summary</h2>
+        <p>Turnover: {summary_data['Turnover']}</p>
+        <p>52 Week High: {summary_data['52 Week High']}</p>
+        <p>52 Week Low: {summary_data['52 Week Low']}</p>
     </body>
     </html>
     """
     return html
 
-# Function to refresh HTML content and upload to FTP server
-def refresh_and_upload():
+# Function to refresh HTML content
+def refresh_html():
     global html_content
     print("Scraping data...")
-    live_data = scrape_live_trading_data()
-    summary = scrape_today_share_price()
-    derived_data = calculate_derived_data(live_data, summary)
+    table_data = scrape_live_trading_data()
+    summary_data = scrape_summary_data()
+    updated_data = calculate_additional_data(table_data, summary_data)
     print("Generating HTML...")
-    html_content = generate_html(live_data, summary, derived_data)
-    print("Uploading to FTP server...")
-    with open("index.html", "w") as file:
-        file.write(html_content)
-    upload_to_ftp("index.html")
-    print("HTML uploaded!")
+    html_content = generate_html(updated_data, summary_data)
+    upload_to_ftp("index.html", html_content)
+    print("HTML updated and uploaded!")
 
-# Function to upload file to FTP server
-def upload_to_ftp(file_path):
-    try:
-        ftp = FTP(FTP_HOST)
-        ftp.login(FTP_USER, FTP_PASS)
-        with open(file_path, "rb") as file:
-            ftp.storbinary(f"STOR {os.path.basename(file_path)}", file)
-        ftp.quit()
-        print("File uploaded successfully!")
-    except Exception as e:
-        print(f"FTP upload failed: {e}")
+# Function to upload the file to FTP server
+def upload_to_ftp(filename, content):
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(content)
+    with FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/")
+        with open(filename, "rb") as file:
+            ftp.storbinary(f"STOR {filename}", file)
+    print(f"{filename} uploaded to FTP server.")
+
+# Define Flask route
+@app.route("/")
+def home():
+    return html_content or "<h1>Loading data...</h1>"
 
 # Initialize scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_and_upload, "interval", minutes=5)
+scheduler.add_job(refresh_html, "interval", minutes=5)
 scheduler.start()
 
 # Refresh data initially
-refresh_and_upload()
+refresh_html()
+
+# Start the server
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # Default port 5000
+    app.run(host="0.0.0.0", port=port)
