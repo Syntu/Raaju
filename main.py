@@ -1,20 +1,13 @@
 import os
-from ftplib import FTP
-from apscheduler.schedulers.blocking import BlockingScheduler
+from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+app = Flask(__name__)
 
-# Retrieve FTP credentials from environment variables
-FTP_HOST = os.getenv("FTP_HOST")
-FTP_USER = os.getenv("FTP_USER")
-FTP_PASS = os.getenv("FTP_PASS")
-
-if not FTP_HOST or not FTP_USER or not FTP_PASS:
-    raise ValueError("Missing FTP credentials in environment variables")
+# Global HTML content
+html_content = ""
 
 # Function to scrape today's share price data
 def scrape_today_share_price():
@@ -75,35 +68,29 @@ def generate_html(table_data):
     """
     return html
 
-# Function to upload file to FTP server
-def upload_to_ftp(file_content):
-    try:
-        with open("index.html", "w", encoding="utf-8") as f:
-            f.write(file_content)
-        
-        with FTP(FTP_HOST) as ftp:
-            ftp.login(FTP_USER, FTP_PASS)
-            with open("index.html", "rb") as f:
-                ftp.storbinary("STOR /htdocs/index.html", f)
-        print("File uploaded successfully!")
-    except Exception as e:
-        print(f"Error uploading file: {e}")
-
-# Function to refresh data and update index.html
-def update_website():
+# Function to refresh HTML content
+def refresh_html():
+    global html_content
     print("Scraping data...")
     table_data = scrape_today_share_price()
     print("Generating HTML...")
     html_content = generate_html(table_data)
-    print("Uploading to FTP...")
-    upload_to_ftp(html_content)
+    print("HTML updated!")
+
+# Define Flask route
+@app.route("/")
+def home():
+    return html_content or "<h1>Loading data...</h1>"
 
 # Initialize scheduler
-scheduler = BlockingScheduler()
-scheduler.add_job(update_website, "interval", minutes=5)
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_html, "interval", minutes=5)
+scheduler.start()
 
-# Start the script
+# Refresh data initially
+refresh_html()
+
+# Start the server
 if __name__ == "__main__":
-    print("Starting script...")
-    update_website()  # Run once at the start
-    scheduler.start()
+    port = int(os.environ.get("PORT", 5000))  # Default port 5000
+    app.run(host="0.0.0.0", port=port)
