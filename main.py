@@ -1,11 +1,9 @@
 import os
 from ftplib import FTP
-from dotenv import load_dotenv
+from apscheduler.schedulers.blocking import BlockingScheduler
 import requests
 from bs4 import BeautifulSoup
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,114 +14,96 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 
 if not FTP_HOST or not FTP_USER or not FTP_PASS:
-    raise ValueError("Missing required environment variables")
+    raise ValueError("Missing FTP credentials in environment variables")
 
-# Establish FTP connection
-ftp = FTP(FTP_HOST)
-ftp.login(FTP_USER, FTP_PASS)
-print("FTP connection established successfully!")
-
-# Scrape Sharesansar Data for Specific Symbol
-def scrape_symbol_data(symbol_name):
-    url = "https://www.sharesansar.com/live-trading"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    rows = soup.find_all("tr")
-    for row in rows:
-        cells = row.find_all("td")
-        if cells and cells[1].text.strip().lower() == symbol_name.lower():
-            data = {
-                "Symbol": cells[1].text.strip(),
-                "LTP": cells[2].text.strip(),
-                "Change Percent": cells[4].text.strip(),
-                "Day High": cells[6].text.strip(),
-                "Day Low": cells[7].text.strip(),
-                "Volume": cells[8].text.strip(),
-            }
-            print(f"Scraped data for {symbol_name}: {data}")
-            return data
-    print(f"No data found for {symbol_name}")
-    return None
-
-# Scrape Today's Share Price Summary
+# Function to scrape today's share price data
 def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    table_data = soup.find_all("td")
-    data = {
-        "Turn Over": table_data[10].text.strip(),
-        "52 Week High": table_data[19].text.strip(),
-        "52 Week Low": table_data[20].text.strip(),
-    }
-    print(f"Today's share price summary: {data}")
-    return data
+    rows = soup.find_all("tr")
+    table_data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            table_data.append([cell.text.strip() for cell in cells])
+    return table_data
 
-# Function to Refresh Data Every 10 Minutes
-def refresh_data():
-    global latest_data
-    print("Refreshing data from Sharesansar...")
-    latest_data["general_data"] = scrape_today_share_price()
-    print(f"Latest general data: {latest_data['general_data']}")
+# Function to generate HTML table
+def generate_html(table_data):
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>NEPSE Live Data</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+            th {
+                background-color: #f2f2f2;
+                text-align: center;
+            }
+            td {
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>NEPSE Live Data</h1>
+        <table>
+            <tr>
+                <th>Symbol</th>
+                <th>LTP</th>
+                <th>Change</th>
+                <th>High</th>
+                <th>Low</th>
+                <th>Volume</th>
+            </tr>
+    """
+    for row in table_data:
+        html += "<tr>" + "".join(f"<td>{cell}</td>" for cell in row[:6]) + "</tr>"
+    html += """
+        </table>
+    </body>
+    </html>
+    """
+    return html
 
-# Telegram Command Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Function to upload file to FTP server
+def upload_to_ftp(file_content):
     try:
-        await update.message.reply_text(
-            "Welcome to Syntoo's NEPSE bot! Send a stock symbol to get the latest data."
-        )
+        with open("index.html", "w", encoding="utf-8") as f:
+            f.write(file_content)
+        
+        with FTP(FTP_HOST) as ftp:
+            ftp.login(FTP_USER, FTP_PASS)
+            with open("index.html", "rb") as f:
+                ftp.storbinary("STOR /htdocs/index.html", f)
+        print("File uploaded successfully!")
     except Exception as e:
-        print(f"Error in start command: {e}")
+        print(f"Error uploading file: {e}")
 
-# Unified Data Handler
-async def handle_symbol_or_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        global latest_data
-        symbol_name = update.message.text.strip()
-        if not symbol_name or symbol_name.startswith("/"):
-            return
+# Function to refresh data and update index.html
+def update_website():
+    print("Scraping data...")
+    table_data = scrape_today_share_price()
+    print("Generating HTML...")
+    html_content = generate_html(table_data)
+    print("Uploading to FTP...")
+    upload_to_ftp(html_content)
 
-        print(f"Received symbol: {symbol_name}")
-        symbol_data = scrape_symbol_data(symbol_name)
-        general_data = latest_data.get("general_data", {})
+# Initialize scheduler
+scheduler = BlockingScheduler()
+scheduler.add_job(update_website, "interval", minutes=5)
 
-        if symbol_data:
-            message = (
-                f"Symbol: {symbol_data['Symbol']}\n"
-                f"LTP: {symbol_data['LTP']}\n"
-                f"Change Percent: {symbol_data['Change Percent']}\n"
-                f"Day High: {symbol_data['Day High']}\n"
-                f"Day Low: {symbol_data['Day Low']}\n"
-                f"Volume: {symbol_data['Volume']}\n"
-                f"Turn Over: {general_data.get('Turn Over', 'N/A')}\n"
-                f"52 Week High: {general_data.get('52 Week High', 'N/A')}\n"
-                f"52 Week Low: {general_data.get('52 Week Low', 'N/A')}"
-            )
-        else:
-            message = (
-                f"Symbol '{symbol_name}' not found.\n"
-                "Please check the symbol and try again."
-            )
-        await update.message.reply_text(message)
-    except Exception as e:
-        print(f"Error in handle_symbol_or_input: {e}")
-
-# Initialize Application and Dispatcher
-application = Application.builder().token("YOUR_BOT_TOKEN").build()
-
-# Add Command Handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symbol_or_input))
-
-# Initialize Scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=10)
-scheduler.start()
-
-# Refresh Data Initially
-refresh_data()
-
-# Start Polling
+# Start the script
 if __name__ == "__main__":
-    print("Bot is running...")
-    application.run_polling(allowed_updates=["message", "callback_query"])
+    print("Starting script...")
+    update_website()  # Run once at the start
+    scheduler.start()
