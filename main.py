@@ -1,10 +1,10 @@
 import os
 import ftplib
-import pytz
-from datetime import datetime, time
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime, time
+import pytz
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,12 +13,17 @@ FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 
-# Set timezone
 NEPAL_TIMEZONE = pytz.timezone("Asia/Kathmandu")
+LAST_UPDATE_TIME = None  # To store last update timestamp
 
-# Global variable for last updated data
-LAST_UPDATED_DATA = None
-LAST_UPDATED_TIME = None
+# Function to check if market is open
+def is_market_open():
+    now = datetime.now(NEPAL_TIMEZONE)
+    market_start = time(10, 45)
+    market_end = time(15, 10)
+    if now.weekday() >= 5:  # Check if it's Friday or Saturday
+        return False
+    return market_start <= now.time() <= market_end
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -98,8 +103,34 @@ def merge_data(live_data, today_data):
             })
     return merged
 
+# Function to calculate additional tables
+def calculate_additional_tables(merged_data):
+    down_from_high = []
+    up_from_low = []
+
+    for row in merged_data:
+        try:
+            ltp = float(row["LTP"])
+            high = float(row["52 Week High"]) if row["52 Week High"] != "N/A" else None
+            low = float(row["52 Week Low"]) if row["52 Week Low"] != "N/A" else None
+
+            if high:
+                down_from_high.append({
+                    "Symbol": row["Symbol"],
+                    "Down From High (%)": f"{((high - ltp) / high * 100):.2f}"
+                })
+            if low:
+                up_from_low.append({
+                    "Symbol": row["Symbol"],
+                    "Up From Low (%)": f"{((ltp - low) / low * 100):.2f}"
+                })
+        except ValueError:
+            continue  # Skip invalid rows
+
+    return down_from_high, up_from_low
+
 # Function to generate HTML
-def generate_html(main_table, last_updated_time):
+def generate_html(main_table, down_table, up_table, last_update):
     html = """
     <!DOCTYPE html>
     <html>
@@ -109,35 +140,47 @@ def generate_html(main_table, last_updated_time):
             table {width: 100%; border-collapse: collapse; margin-top: 20px;}
             th, td {border: 1px solid #ddd; padding: 8px; text-align: center;}
             th {background-color: #8B4513; color: white; position: sticky; top: 0;}
+            .light-red {background-color: #FFCCCB;}
+            .light-green {background-color: #D4EDDA;}
+            .light-blue {background-color: #CCE5FF;}
         </style>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
+        <p style="text-align: center;">Updated On: {last_update}</p>
+        <h2>Main Table</h2>
         <table>
             <tr>
                 <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th><th>Day High</th>
                 <th>Day Low</th><th>Previous Close</th><th>Volume</th>
                 <th>Turnover</th><th>52 Week High</th><th>52 Week Low</th>
             </tr>
-    """
+    """.format(last_update=last_update)
+
     for row in main_table:
+        change_class = "light-red" if float(row["Change%"]) < 0 else (
+            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr>
                 <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td>{row["Change%"]}</td><td>{row["Day High"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
                 <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
             </tr>
         """
-    html += f"""
-        </table>
-        <p style="text-align: center; margin-top: 20px;">
-            Updated on: {last_updated_time.strftime('%Y-%m-%d %H:%M:%S %p')}
-        </p>
-    </body>
-    </html>
-    """
+    html += "</table>"
+
+    html += "<h2>Down From High</h2><table><tr><th>Symbol</th><th>Down From High (%)</th></tr>"
+    for row in down_table:
+        html += f"<tr><td>{row['Symbol']}</td><td>{row['Down From High (%)']}</td></tr>"
+    html += "</table>"
+
+    html += "<h2>Up From Low</h2><table><tr><th>Symbol</th><th>Up From Low (%)</th></tr>"
+    for row in up_table:
+        html += f"<tr><td>{row['Symbol']}</td><td>{row['Up From Low (%)']}</td></tr>"
+    html += "</table></body></html>"
+
     return html
 
 # Upload to FTP
@@ -149,28 +192,16 @@ def upload_to_ftp(html_content):
         with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
 
-# Check if within market hours
-def is_market_open():
-    now = datetime.now(NEPAL_TIMEZONE)
-    market_open_time = time(10, 45)
-    market_close_time = time(15, 10)
-    return now.weekday() in range(5) and market_open_time <= now.time() <= market_close_time
-
 # Refresh Data
 def refresh_data():
-    global LAST_UPDATED_DATA, LAST_UPDATED_TIME
+    global LAST_UPDATE_TIME
     if is_market_open():
-        print("Fetching data...")
         live_data = scrape_live_trading()
         today_data = scrape_today_share_price()
-        LAST_UPDATED_DATA = merge_data(live_data, today_data)
-        LAST_UPDATED_TIME = datetime.now(NEPAL_TIMEZONE)
-        print("Data refreshed.")
-    else:
-        print("Market closed. Using last available data.")
-
-    if LAST_UPDATED_DATA:
-        html_content = generate_html(LAST_UPDATED_DATA, LAST_UPDATED_TIME)
+        merged_data = merge_data(live_data, today_data)
+        down_table, up_table = calculate_additional_tables(merged_data)
+        LAST_UPDATE_TIME = datetime.now(NEPAL_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+        html_content = generate_html(merged_data, down_table, up_table, LAST_UPDATE_TIME)
         upload_to_ftp(html_content)
 
 # Scheduler
@@ -178,7 +209,7 @@ scheduler = BackgroundScheduler(timezone=NEPAL_TIMEZONE)
 scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
-# Initial Data Refresh
+# Initial Run
 refresh_data()
 
 # Keep Running
