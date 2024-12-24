@@ -67,25 +67,21 @@ def scrape_today_share_price_summary():
         "52 Week Low": table_data[20].text.strip()
     }
 
-# Function to calculate additional columns and merge data
+# Function to merge the data into one unified format
 def merge_data(live_data, today_data, summary_data):
-    for i, row in enumerate(live_data):
-        # Fetch Symbol from 'Today's Share Price'
-        row["Symbol"] = today_data[i]["Symbol"] if i < len(today_data) else row["Symbol"]
-
-        # Fetch other data from 'Live Trading'
-        ltp = float(row["LTP"].replace(",", "")) if row["LTP"] else 0
-        high = float(summary_data["52 Week High"].replace(",", ""))
-        low = float(summary_data["52 Week Low"].replace(",", ""))
-
-        row["Turnover"] = summary_data["Turnover"]
-        row["52 Week High"] = summary_data["52 Week High"]
-        row["52 Week Low"] = summary_data["52 Week Low"]
-        row["Down From High"] = f"{((high - ltp) / high * 100):.2f}%" if high else "N/A"
-        row["Up From Low"] = f"{((ltp - low) / low * 100):.2f}%" if low else "N/A"
+    # Create a dictionary for easy lookup
+    symbol_data = {row["Symbol"]: row for row in today_data}
+    for live_row in live_data:
+        symbol = live_row["Symbol"]
+        if symbol in symbol_data:
+            live_row.update(symbol_data[symbol])  # Add 'Today's Share Price' data
+        # Add common fields from summary data
+        live_row["Turnover"] = summary_data["Turnover"]
+        live_row["52 Week High"] = summary_data["52 Week High"]
+        live_row["52 Week Low"] = summary_data["52 Week Low"]
     return live_data
 
-# Function to generate HTML table
+# Function to generate the HTML table
 def generate_html(merged_data):
     html = """
     <!DOCTYPE html>
@@ -160,13 +156,12 @@ def generate_html(merged_data):
                         <th onclick="sortTable(8)">Turnover</th>
                         <th onclick="sortTable(9)">52 Week High</th>
                         <th onclick="sortTable(10)">52 Week Low</th>
-                        <th onclick="sortTable(11)">Down From High</th>
-                        <th onclick="sortTable(12)">Up From Low</th>
                     </tr>
                 </thead>
                 <tbody>
     """
     for row in merged_data:
+        # Assigning color based on Change% value
         change_percent_class = "zero"
         try:
             change_percent = float(row["Change%"].replace("%", "").replace(",", ""))
@@ -177,7 +172,8 @@ def generate_html(merged_data):
         except ValueError:
             pass
 
-        html += f"<tr class='{change_percent_class}'>" + "".join(f"<td>{row[col]}</td>" for col in row) + "</tr>"
+        # HTML Row for each stock
+        html += f"<tr class='{change_percent_class}'>" + "".join(f"<td>{row[col]}</td>" for col in row if col != "Symbol") + "</tr>"
     html += """
                 </tbody>
             </table>
@@ -240,4 +236,25 @@ def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
     summary_data = scrape_today_share_price_summary()
-    merged_data =
+    merged_data = merge_data(live_data, today_data, summary_data)
+    print("Generating HTML...")
+    html_content = generate_html(merged_data)
+    print("Uploading to FTP...")
+    upload_to_ftp(html_content)
+    print("Data refreshed and uploaded successfully!")
+
+# Initialize scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_data, "interval", minutes=5)
+scheduler.start()
+
+# Refresh data initially
+refresh_data()
+
+# Keep the script running
+try:
+    print("Script running... Press Ctrl+C to stop.")
+    while True:
+        pass
+except (KeyboardInterrupt, SystemExit):
+    print("Stopping script...")
