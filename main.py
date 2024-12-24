@@ -1,8 +1,6 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from pytz import timezone
-from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -61,11 +59,6 @@ def merge_data(live_data, today_data):
         symbol = live["Symbol"]
         if symbol in today_dict:
             today = today_dict[symbol]
-            high = today["52 Week High"]
-            low = today["52 Week Low"]
-            ltp = live["LTP"]
-            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
-            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
             merged.append({
                 "SN": today["SN"],
                 "Symbol": symbol,
@@ -78,72 +71,103 @@ def merge_data(live_data, today_data):
                 "Turnover": today["Turnover"],
                 "52 Week High": today["52 Week High"],
                 "52 Week Low": today["52 Week Low"],
-                "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
-                "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
+                "Down From High (%)": f"{((float(today['52 Week High']) - float(live['LTP'])) / float(today['52 Week High']) * 100):.2f}" if today['52 Week High'] != "N/A" else "N/A",
+                "Up From Low (%)": f"{((float(live['LTP']) - float(today['52 Week Low'])) / float(today['52 Week Low']) * 100):.2f}" if today['52 Week Low'] != "N/A" else "N/A"
+            })
+        else:
+            # If no match found, use live data with defaults
+            merged.append({
+                "SN": "-",
+                "Symbol": symbol,
+                "LTP": live["LTP"],
+                "Change%": live["Change%"],
+                "Day High": live["Day High"],
+                "Day Low": live["Day Low"],
+                "Previous Close": live["Previous Close"],
+                "Volume": live["Volume"],
+                "Turnover": "N/A",
+                "52 Week High": "N/A",
+                "52 Week Low": "N/A",
+                "Down From High (%)": "N/A",
+                "Up From Low (%)": "N/A"
             })
     return merged
 
 # Function to generate HTML
-def generate_html(main_table):
-    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
-    html = f"""
+def generate_html(data):
+    html = """
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
-            h1, h2 {{ text-align: center; margin: 10px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; cursor: pointer; }}
-            th {{ background-color: #8B4513; color: white; }}
-            tr:nth-child(even) {{ background-color: #f9f9f9; }}
-            tr:hover {{ background-color: #fffbcc; }}
-            .highlight {{ background-color: #fffbcc !important; }}
-            .header {{ position: absolute; top: 0; right: 10px; padding: 10px; }}
-            .light-red {{ background-color: #FFCCCB; }}
-            .light-green {{ background-color: #D4EDDA; }}
-            .light-blue {{ background-color: #CCE5FF; }}
-            @media (max-width: 768px) {{
-                table {{ font-size: 12px; }}
-                th, td {{ padding: 5px; }}
-            }}
-            @media (max-width: 480px) {{
-                table {{ font-size: 10px; }}
-                th, td {{ padding: 3px; }}
-            }}
+            body {font-family: Arial, sans-serif; margin: 20px;}
+            table {width: 100%; border-collapse: collapse; margin-top: 20px;}
+            th, td {border: 1px solid #ddd; padding: 8px; text-align: center;}
+            th {background-color: #8B4513; color: white; cursor: pointer; position: sticky; top: 0;}
+            tr:hover {background-color: #f1f1f1;}
+            td {cursor: pointer;}
+            .highlight {background-color: #ffff99 !important;}
+            .light-red {background-color: #FFCCCB;}
+            .light-green {background-color: #D4EDDA;}
+            .light-blue {background-color: #CCE5FF;}
+            .header {display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;}
+            .developer {font-weight: bold; color: #8B4513;}
         </style>
         <script>
-            function sortTable(n) {{
-                var table = document.getElementById("dataTable");
-                var rows = Array.from(table.rows).slice(1);
-                var ascending = !table.rows[1].getAttribute("data-asc");
-                rows.sort(function(a, b) {{
-                    var x = a.cells[n].innerText;
-                    var y = b.cells[n].innerText;
-                    if (!isNaN(parseFloat(x)) && !isNaN(parseFloat(y))) {{
-                        return ascending ? parseFloat(x) - parseFloat(y) : parseFloat(y) - parseFloat(x);
-                    }} else {{
-                        return ascending ? x.localeCompare(y) : y.localeCompare(x);
-                    }}
-                }});
-                table.tBodies[0].append(...rows);
-                Array.from(table.rows).forEach(row => row.setAttribute("data-asc", ascending));
-            }}
-            function highlightRow(row) {{
-                Array.from(document.querySelectorAll(".highlight")).forEach(el => el.classList.remove("highlight"));
+            // Sorting function
+            function sortTable(n) {
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("dataTable");
+                switching = true;
+                dir = "asc"; 
+                while (switching) {
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        if (dir == "asc") {
+                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (shouldSwitch) {
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    } else {
+                        if (switchcount == 0 && dir == "asc") {
+                            dir = "desc";
+                            switching = true;
+                        }
+                    }
+                }
+            }
+
+            // Row highlight function
+            function highlightRow(row) {
+                var rows = document.getElementsByTagName("tr");
+                for (var i = 0; i < rows.length; i++) {
+                    rows[i].classList.remove("highlight");
+                }
                 row.classList.add("highlight");
-            }}
+            }
         </script>
     </head>
     <body>
         <div class="header">
-            Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a>
+            <h1>NEPSE Live Data</h1>
+            <span class="developer">Developed By: Syntoo</span>
         </div>
-        <h1>NEPSE Live Data</h1>
-        <h2>Updated On: {updated_time}</h2>
         <table id="dataTable">
             <thead>
                 <tr>
@@ -164,17 +188,24 @@ def generate_html(main_table):
             </thead>
             <tbody>
     """
-    for row in main_table:
+    for row in data:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
+                <td>{row["SN"]}</td>
+                <td>{row["Symbol"]}</td>
+                <td>{row["LTP"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td>
+                <td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td>
+                <td>{row["Previous Close"]}</td>
+                <td>{row["Volume"]}</td>
+                <td>{row["Turnover"]}</td>
+                <td>{row["52 Week High"]}</td>
+                <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
     html += """
