@@ -1,3 +1,4 @@
+from flask import Flask
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -12,6 +13,8 @@ load_dotenv()
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
+
+app = Flask(__name__)  # Flask सर्भर सुरू गर्नुहोस्
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -34,7 +37,7 @@ def scrape_live_trading():
             })
     return data
 
-# Function to scrape today's share price summary
+# Function to scrape today's share price
 def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
@@ -53,7 +56,7 @@ def scrape_today_share_price():
             })
     return data
 
-# Function to merge live and today's data
+# Function to merge live data and today's data
 def merge_data(live_data, today_data):
     merged = []
     today_dict = {item["Symbol"]: item for item in today_data}
@@ -90,144 +93,232 @@ def merge_data(live_data, today_data):
             })
     return merged
 
-# Function to calculate additional columns
+# Function to calculate additional tables
 def calculate_additional_tables(merged_data):
     for row in merged_data:
         try:
             ltp = float(row["LTP"])
             high = float(row["52 Week High"]) if row["52 Week High"] != "N/A" else None
             low = float(row["52 Week Low"]) if row["52 Week Low"] != "N/A" else None
-
-            row["Down From High (%)"] = f"{((high - ltp) / high * 100):.2f}" if high else "N/A"
-            row["Up From Low (%)"] = f"{((ltp - low) / low * 100):.2f}" if low else "N/A"
+            row["Down From High"] = f"{((high - ltp) / high * 100):.2f}" if high else "N/A"
+            row["Up From Low"] = f"{((ltp - low) / low * 100):.2f}" if low else "N/A"
         except ValueError:
-            row["Down From High (%)"] = "N/A"
-            row["Up From Low (%)"] = "N/A"
+            row["Down From High"] = "N/A"
+            row["Up From Low"] = "N/A"
     return merged_data
 
 # Function to generate HTML
-def generate_html(main_table, update_date_time):
+def generate_html(data, update_time):
     html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>NEPSE Live Data</title>
-        <style>
-            body {{font-family: Arial, sans-serif; margin: 20px;}}
-            table {{width: 100%; border-collapse: collapse; margin-top: 20px;}}
-            th, td {{border: 1px solid #ddd; padding: 8px; text-align: center;}}
-            th {{background-color: #8B4513; color: white; position: sticky; top: 0; cursor: pointer;}}
-            th:hover {{background-color: #A0522D;}}
-            h1 {{font-size: 46px; font-weight: bold; text-align: center; margin-bottom: 0;}}
-            .header {{display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;}}
-            .footer {{text-align: center; margin-top: 20px; font-size: 16px;}}
-            .sortable {{cursor: pointer;}}
-            .sorted-asc::after {{content: " ▲";}}
-            .sorted-desc::after {{content: " ▼";}}
-        </style>
-        <script>
-            // Sorting Functionality
-            function sortTable(columnIndex, type) {{
-                const table = document.getElementById("data-table");
-                const rows = Array.from(table.rows).slice(1);
-                let isAscending = table.dataset.sortOrder === "asc";
-
-                rows.sort((rowA, rowB) => {{
-                    let cellA = rowA.cells[columnIndex].innerText;
-                    let cellB = rowB.cells[columnIndex].innerText;
-
-                    if (type === "number") {{
-                        cellA = parseFloat(cellA) || 0;
-                        cellB = parseFloat(cellB) || 0;
-                    }}
-
-                    return isAscending
-                        ? cellA > cellB ? 1 : -1
-                        : cellA < cellB ? 1 : -1;
-                }});
-
-                isAscending = !isAscending;
-                table.dataset.sortOrder = isAscending ? "asc" : "desc";
-
-                rows.forEach(row => table.appendChild(row));
-            }}
-        </script>
-    </head>
-    <body>
-        <h1>NEPSE Live Data</h1>
-        <div class="header">
-            <p>Updated on: {update_date_time}</p>
-            <p>Developed By: <a href="https://www.syntoo.com" target="_blank">Syntoo</a></p>
-        </div>
-        <table id="data-table" data-sort-order="asc">
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NEPSE Live Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            text-align: center;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        h2 {
+            text-align: center;
+            font-size: 20px;
+            margin: 0;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 20px;
+        }
+        .header div {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .header a {
+            text-decoration: none;
+            color: #000;
+            font-weight: bold;
+        }
+        .header a:hover {
+            color: #8B4513;
+        }
+        .table-container {
+            width: 100%;
+            overflow: auto;
+            position: relative;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px auto;
+            font-size: 14px;
+            table-layout: fixed;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+            min-width: 100px;
+        }
+        th {
+            background-color: #8B4513;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            cursor: pointer;
+        }
+        th.sortable:after {
+            content: " ⇅";
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        th:first-child {
+            left: 0;
+            z-index: 3;
+        }
+        td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .footer {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>NEPSE Live Data</h1>
+    <div class="header">
+        <div>Updated on: 2024-12-24 18:00:00</div>
+        <a href="https://syntoo.com">Developed By: Syntoo</a>
+    </div>
+    <h2>Welcome 🙏 to NEPSE data Website.</h2>
+    <div class="table-container">
+        <table id="nepseTable">
             <thead>
                 <tr>
-                    <th onclick="sortTable(0, 'number')">SN</th>
-                    <th onclick="sortTable(1, 'string')">Symbol</th>
-                    <th onclick="sortTable(2, 'number')">LTP</th>
-                    <th onclick="sortTable(3, 'number')">Change%</th>
-                    <th onclick="sortTable(4, 'number')">Day High</th>
-                    <th onclick="sortTable(5, 'number')">Day Low</th>
-                    <th onclick="sortTable(6, 'number')">Previous Close</th>
-                    <th onclick="sortTable(7, 'number')">Volume</th>
-                    <th onclick="sortTable(8, 'number')">Turnover</th>
-                    <th onclick="sortTable(9, 'number')">52 Week High</th>
-                    <th onclick="sortTable(10, 'number')">52 Week Low</th>
-                    <th onclick="sortTable(11, 'number')">Down From High (%)</th>
-                    <th onclick="sortTable(12, 'number')">Up From Low (%)</th>
+                    <th>SN</th>
+                    <th class="sortable">Symbol</th>
+                    <th class="sortable">LTP</th>
+                    <th class="sortable">Change%</th>
+                    <th class="sortable">Day High</th>
+                    <th class="sortable">Day Low</th>
+                    <th class="sortable">Previous Close</th>
+                    <th class="sortable">Volume</th>
+                    <th class="sortable">Turnover</th>
+                    <th class="sortable">52 Week High</th>
+                    <th class="sortable">52 Week Low</th>
+                    <th class="sortable">Down From High</th>
+                    <th class="sortable">Up From Low</th>
                 </tr>
             </thead>
             <tbody>
-    """
-    for row in main_table:
-        html += f"""
-            <tr>
-                <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td>{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
-            </tr>
-        """
-    html += """
+                <tr>
+                    <td>1</td>
+                    <td>ABC</td>
+                    <td>100</td>
+                    <td>5%</td>
+                    <td>105</td>
+                    <td>95</td>
+                    <td>98</td>
+                    <td>2000</td>
+                    <td>200,000</td>
+                    <td>150</td>
+                    <td>80</td>
+                    <td>-33.33%</td>
+                    <td>25%</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>DEF</td>
+                    <td>200</td>
+                    <td>-2%</td>
+                    <td>210</td>
+                    <td>190</td>
+                    <td>202</td>
+                    <td>3000</td>
+                    <td>600,000</td>
+                    <td>250</td>
+                    <td>180</td>
+                    <td>-20%</td>
+                    <td>11.11%</td>
+                </tr>
+                <!-- Add more rows dynamically -->
             </tbody>
         </table>
-        <div class="footer">
-            <p>Welcome 🙏 to NEPSE Data Website.</p>
-        </div>
-    </body>
-    </html>
+    </div>
+    <div class="footer">
+        <p>Welcome 🙏 to NEPSE data Website.</p>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const table = document.getElementById("nepseTable");
+            const headers = table.querySelectorAll("th.sortable");
+
+            headers.forEach((header, index) => {
+                header.addEventListener("click", () => {
+                    const rows = Array.from(table.querySelector("tbody").rows);
+                    const ascending = header.classList.toggle("asc");
+                    rows.sort((a, b) => {
+                        const cellA = a.cells[index].innerText.trim();
+                        const cellB = b.cells[index].innerText.trim();
+                        const isNumeric = !isNaN(cellA) && !isNaN(cellB);
+                        return isNumeric
+                            ? (ascending ? cellA - cellB : cellB - cellA)
+                            : (ascending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA));
+                    });
+                    rows.forEach(row => table.querySelector("tbody").appendChild(row));
+                });
+            });
+        });
+    </script>
+</body>
+</html>
     """
     return html
 
-# FTP Upload Function
+# Upload to FTP
 def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
     with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        with open("index.html", "rb") as file:
-            ftp.storbinary("STOR index.html", file)
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
-# Scheduler to scrape and update data at regular intervals
+# Scheduler task
 def scheduled_task():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
     final_data = calculate_additional_tables(merged_data)
-
     update_date_time = datetime.now(pytz.timezone('Asia/Kathmandu')).strftime("%Y-%m-%d %H:%M:%S")
     html_content = generate_html(final_data, update_date_time)
     upload_to_ftp(html_content)
 
 # Setup scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(scheduled_task, 'interval', minutes=15)
+scheduler.add_job(scheduled_task, "interval", minutes=15)
 scheduler.start()
 
-# To keep the script running continuously
-try:
-    while True:
-        pass
-except (KeyboardInterrupt, SystemExit):
-    scheduler.shutdown()
+# Flask route
+@app.route("/")
+def home():
+    return "NEPSE Data Service is Running!"
+
+# Main
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
