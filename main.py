@@ -1,10 +1,10 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone
+from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, time
-import pytz
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -12,18 +12,6 @@ load_dotenv()
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
-
-NEPAL_TIMEZONE = pytz.timezone("Asia/Kathmandu")
-LAST_UPDATE_TIME = None  # To store last update timestamp
-
-# Function to check if market is open
-def is_market_open():
-    now = datetime.now(NEPAL_TIMEZONE)
-    market_start = time(10, 45)
-    market_end = time(15, 10)
-    if now.weekday() >= 5:  # Check if it's Friday or Saturday
-        return False
-    return market_start <= now.time() <= market_end
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -73,6 +61,11 @@ def merge_data(live_data, today_data):
         symbol = live["Symbol"]
         if symbol in today_dict:
             today = today_dict[symbol]
+            high = today["52 Week High"]
+            low = today["52 Week Low"]
+            ltp = live["LTP"]
+            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
+            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
             merged.append({
                 "SN": today["SN"],
                 "Symbol": symbol,
@@ -84,79 +77,55 @@ def merge_data(live_data, today_data):
                 "Volume": live["Volume"],
                 "Turnover": today["Turnover"],
                 "52 Week High": today["52 Week High"],
-                "52 Week Low": today["52 Week Low"]
-            })
-        else:
-            # If no match found, use live data with defaults
-            merged.append({
-                "SN": "-",
-                "Symbol": symbol,
-                "LTP": live["LTP"],
-                "Change%": live["Change%"],
-                "Day High": live["Day High"],
-                "Day Low": live["Day Low"],
-                "Previous Close": live["Previous Close"],
-                "Volume": live["Volume"],
-                "Turnover": "N/A",
-                "52 Week High": "N/A",
-                "52 Week Low": "N/A"
+                "52 Week Low": today["52 Week Low"],
+                "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
+                "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
             })
     return merged
 
-# Function to calculate additional tables
-def calculate_additional_tables(merged_data):
-    down_from_high = []
-    up_from_low = []
-
-    for row in merged_data:
-        try:
-            ltp = float(row["LTP"])
-            high = float(row["52 Week High"]) if row["52 Week High"] != "N/A" else None
-            low = float(row["52 Week Low"]) if row["52 Week Low"] != "N/A" else None
-
-            if high:
-                down_from_high.append({
-                    "Symbol": row["Symbol"],
-                    "Down From High (%)": f"{((high - ltp) / high * 100):.2f}"
-                })
-            if low:
-                up_from_low.append({
-                    "Symbol": row["Symbol"],
-                    "Up From Low (%)": f"{((ltp - low) / low * 100):.2f}"
-                })
-        except ValueError:
-            continue  # Skip invalid rows
-
-    return down_from_high, up_from_low
-
 # Function to generate HTML
-def generate_html(main_table, down_table, up_table, last_update):
-    html = """
+def generate_html(main_table):
+    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <title>NEPSE Live Data</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to Syntoo's NEPSE Live Data</title>
         <style>
-            table {width: 100%; border-collapse: collapse; margin-top: 20px;}
-            th, td {border: 1px solid #ddd; padding: 8px; text-align: center;}
-            th {background-color: #8B4513; color: white; position: sticky; top: 0;}
-            .light-red {background-color: #FFCCCB;}
-            .light-green {background-color: #D4EDDA;}
-            .light-blue {background-color: #CCE5FF;}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1, h2 {{ text-align: center; margin: 10px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
+            th {{ background-color: #8B4513; color: white; position: sticky; top: 0; }}
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            .light-red {{ background-color: #FFCCCB; }}
+            .light-green {{ background-color: #D4EDDA; }}
+            .light-blue {{ background-color: #CCE5FF; }}
+            .footer {{ text-align: right; padding: 10px; font-size: 12px; color: gray; }}
+            .footer a {{ color: inherit; text-decoration: none; }}
+            @media (max-width: 768px) {{
+                table {{ font-size: 12px; }}
+                th, td {{ padding: 5px; }}
+            }}
+            @media (max-width: 480px) {{
+                table {{ font-size: 10px; }}
+                th, td {{ padding: 3px; }}
+            }}
         </style>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <p style="text-align: center;">Updated On: {last_update}</p>
-        <h2>Main Table</h2>
+        <h2>Updated On: {updated_time}</h2>
         <table>
             <tr>
                 <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th><th>Day High</th>
                 <th>Day Low</th><th>Previous Close</th><th>Volume</th>
                 <th>Turnover</th><th>52 Week High</th><th>52 Week Low</th>
+                <th>Down From High (%)</th><th>Up From Low (%)</th>
             </tr>
-    """.format(last_update=last_update)
-
+    """
     for row in main_table:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
@@ -167,20 +136,17 @@ def generate_html(main_table, down_table, up_table, last_update):
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
                 <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
             </tr>
         """
-    html += "</table>"
-
-    html += "<h2>Down From High</h2><table><tr><th>Symbol</th><th>Down From High (%)</th></tr>"
-    for row in down_table:
-        html += f"<tr><td>{row['Symbol']}</td><td>{row['Down From High (%)']}</td></tr>"
-    html += "</table>"
-
-    html += "<h2>Up From Low</h2><table><tr><th>Symbol</th><th>Up From Low (%)</th></tr>"
-    for row in up_table:
-        html += f"<tr><td>{row['Symbol']}</td><td>{row['Up From Low (%)']}</td></tr>"
-    html += "</table></body></html>"
-
+    html += """
+        </table>
+        <div class="footer">
+            Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a>
+        </div>
+    </body>
+    </html>
+    """
     return html
 
 # Upload to FTP
@@ -194,22 +160,18 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
-    global LAST_UPDATE_TIME
-    if is_market_open():
-        live_data = scrape_live_trading()
-        today_data = scrape_today_share_price()
-        merged_data = merge_data(live_data, today_data)
-        down_table, up_table = calculate_additional_tables(merged_data)
-        LAST_UPDATE_TIME = datetime.now(NEPAL_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-        html_content = generate_html(merged_data, down_table, up_table, LAST_UPDATE_TIME)
-        upload_to_ftp(html_content)
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
+    html_content = generate_html(merged_data)
+    upload_to_ftp(html_content)
 
 # Scheduler
-scheduler = BackgroundScheduler(timezone=NEPAL_TIMEZONE)
+scheduler = BackgroundScheduler()
 scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
-# Initial Run
+# Initial Data Refresh
 refresh_data()
 
 # Keep Running
