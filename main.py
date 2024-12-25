@@ -128,6 +128,7 @@ def generate_html(main_table):
                 position: sticky;
                 top: 0;
                 z-index: 1;
+                cursor: pointer;
             }}
             tr:nth-child(even) {{
                 background-color: #f9f9f9;
@@ -229,7 +230,7 @@ def generate_html(main_table):
             <table id="nepseTable">
                 <thead>
                     <tr>
-                        <th onclick="sortTable(0)">SN</th>
+                        <th>SN</th>
                         <th onclick="sortTable(1)">Symbol</th>
                         <th onclick="sortTable(2)">LTP</th>
                         <th onclick="sortTable(3)">Change%</th>
