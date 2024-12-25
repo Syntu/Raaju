@@ -142,6 +142,9 @@ def generate_html(main_table):
             .light-blue {{
                 background-color: #CCE5FF;
             }}
+            .highlight {{
+                background-color: yellow !important;
+            }}
             .footer {{
                 text-align: right;
                 padding: 10px;
@@ -216,6 +219,15 @@ def generate_html(main_table):
                     }}
                 }}
             }}
+
+            // Function to highlight a row when a symbol is clicked
+            function highlightRow(row) {{
+                var rows = document.getElementById("nepseTable").rows;
+                for (var i = 1; i < rows.length; i++) {{
+                    rows[i].classList.remove("highlight");
+                }}
+                row.classList.add("highlight");
+            }}
         </script>
     </head>
     <body>
@@ -251,7 +263,7 @@ def generate_html(main_table):
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
-            <tr>
+            <tr onclick="highlightRow(this)">
                 <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
@@ -301,8 +313,3 @@ try:
         pass
 except KeyboardInterrupt:
     scheduler.shutdown()
-
-#main
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
