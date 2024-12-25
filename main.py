@@ -15,6 +15,7 @@ load_dotenv()
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
+PORT = int(os.getenv("PORT", 5000))
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -160,14 +161,14 @@ def generate_html(main_table):
                 background-color: yellow !important;
             }}
             th.symbol {{
-                position: -webkit-sticky; 
+                position: -webkit-sticky;
                 position: sticky;
                 left: 0;
                 z-index: 3;
                 background-color: #8B4513; /* Match the header background color */
             }}
             td.symbol {{
-                position: -webkit-sticky; 
+                position: -webkit-sticky;
                 position: sticky;
                 left: 0;
                 z-index: 1;
@@ -215,7 +216,7 @@ def generate_html(main_table):
                 var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
                 table = document.getElementById("nepseTable");
                 switching = true;
-                dir = "asc"; 
+                dir = "asc";
                 var headers = table.getElementsByTagName("TH");
                 for (var j = 0; j < headers.length; j++) {{
                     headers[j].classList.remove("arrow", "desc");
@@ -326,7 +327,7 @@ def upload_to_ftp(html_content):
         f.write(html_content)
     with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
         ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f):
+        with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
@@ -347,4 +348,4 @@ refresh_data()
 
 # Keep Running
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=PORT)
