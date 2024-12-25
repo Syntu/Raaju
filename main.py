@@ -110,6 +110,8 @@ def generate_html(main_table):
                 margin: 0 auto;
                 width: 95%;
                 overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
             }}
             table {{
                 width: 100%;
@@ -127,7 +129,7 @@ def generate_html(main_table):
                 color: white;
                 position: sticky;
                 top: 0;
-                z-index: 1;
+                z-index: 2;
                 cursor: pointer;
                 white-space: nowrap;
             }}
@@ -158,13 +160,14 @@ def generate_html(main_table):
                 position: -webkit-sticky; 
                 position: sticky;
                 left: 0;
-                z-index: 2;
+                z-index: 3;
                 background-color: #8B4513; /* Match the header background color */
             }}
             td.symbol {{
                 position: -webkit-sticky; 
                 position: sticky;
                 left: 0;
+                z-index: 1;
                 background-color: inherit;
             }}
             .footer {{
@@ -222,13 +225,17 @@ def generate_html(main_table):
                         shouldSwitch = false;
                         x = rows[i].getElementsByTagName("TD")[n];
                         y = rows[i + 1].getElementsByTagName("TD")[n];
-                        if (dir == "asc") {{
-                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {{
+                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
+                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
+                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
+                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
+                        if (dir === "asc") {{
+                            if (xValue > yValue) {{
                                 shouldSwitch = true;
                                 break;
                             }}
-                        }} else if (dir == "desc") {{
-                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {{
+                        }} else if (dir === "desc") {{
+                            if (xValue < yValue) {{
                                 shouldSwitch = true;
                                 break;
                             }}
