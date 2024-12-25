@@ -6,6 +6,9 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from flask import Flask
+
+app = Flask(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -323,7 +326,7 @@ def upload_to_ftp(html_content):
         f.write(html_content)
     with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
         ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
+        with open("index.html", "rb") as f):
             ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
@@ -343,8 +346,5 @@ scheduler.start()
 refresh_data()
 
 # Keep Running
-try:
-    while True:
-        pass
-except KeyboardInterrupt:
-    scheduler.shutdown()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
