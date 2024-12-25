@@ -129,6 +129,15 @@ def generate_html(main_table):
                 top: 0;
                 z-index: 1;
                 cursor: pointer;
+                white-space: nowrap;
+            }}
+            th.arrow::after {{
+                content: '\\25B2'; /* Up arrow */
+                float: right;
+                margin-left: 5px;
+            }}
+            th.arrow.desc::after {{
+                content: '\\25BC'; /* Down arrow */
             }}
             tr:nth-child(even) {{
                 background-color: #f9f9f9;
@@ -144,6 +153,19 @@ def generate_html(main_table):
             }}
             .highlight {{
                 background-color: yellow !important;
+            }}
+            th.symbol {{
+                position: -webkit-sticky; 
+                position: sticky;
+                left: 0;
+                z-index: 2;
+                background-color: #8B4513; /* Match the header background color */
+            }}
+            td.symbol {{
+                position: -webkit-sticky; 
+                position: sticky;
+                left: 0;
+                background-color: inherit;
             }}
             .footer {{
                 text-align: right;
@@ -188,6 +210,11 @@ def generate_html(main_table):
                 table = document.getElementById("nepseTable");
                 switching = true;
                 dir = "asc"; 
+                var headers = table.getElementsByTagName("TH");
+                for (var j = 0; j < headers.length; j++) {{
+                    headers[j].classList.remove("arrow", "desc");
+                }}
+                headers[n].classList.add("arrow");
                 while (switching) {{
                     switching = false;
                     rows = table.rows;
@@ -200,7 +227,7 @@ def generate_html(main_table):
                                 shouldSwitch = true;
                                 break;
                             }}
-                        }} else if (dir === "desc") {{
+                        }} else if (dir == "desc") {{
                             if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {{
                                 shouldSwitch = true;
                                 break;
@@ -214,6 +241,7 @@ def generate_html(main_table):
                     }} else {{
                         if (switchcount === 0 && dir === "asc") {{
                             dir = "desc";
+                            headers[n].classList.add("desc");
                             switching = true;
                         }}
                     }}
@@ -243,7 +271,7 @@ def generate_html(main_table):
                 <thead>
                     <tr>
                         <th>SN</th>
-                        <th onclick="sortTable(1)">Symbol</th>
+                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
                         <th onclick="sortTable(2)">LTP</th>
                         <th onclick="sortTable(3)">Change%</th>
                         <th onclick="sortTable(4)">Day High</th>
@@ -264,7 +292,7 @@ def generate_html(main_table):
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["SN"]}</td><td class="symbol">{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
