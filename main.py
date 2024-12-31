@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
@@ -194,6 +194,16 @@ def generate_html(main_table):
             .right {{
                 float: right;
             }}
+            .search-container {{
+                text-align: center;
+                margin-bottom: 10px;
+            }}
+            .search-container input {{
+                width: 200px;
+                padding: 5px;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }}
             @media (max-width: 768px) {{
                 table {{
                     font-size: 12px;
@@ -267,14 +277,62 @@ def generate_html(main_table):
                 }}
                 row.classList.add("highlight");
             }}
+
+            // Function to filter table rows based on search input
+            function filterTable() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to change background color of Symbol column based on Change%
+            function updateSymbolColors() {{
+                var table = document.getElementById("nepseTable");
+                var rows = table.getElementsByTagName("tr");
+                for (var i = 1; i < rows.length; i++) {{
+                    var changeCell = rows[i].getElementsByTagName("td")[3];
+                    var symbolCell = rows[i].getElementsByTagName("td")[1];
+                    if (changeCell) {{
+                        var changeValue = parseFloat(changeCell.innerText);
+                        if (changeValue < 0) {{
+                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
+                        }} else if (changeValue > 0) {{
+                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
+                        }} else {{
+                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
+                        }}
+                    }}
+                }}
+            }}
+
+            window.onload = function() {{
+                updateSymbolColors();
+            }};
         </script>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome 🙏 to my Nepse Data website</h2>
+        <h2>Welcome ðŸ™ to my Nepse Data website</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
 
         <div class="table-container">
@@ -303,7 +361,7 @@ def generate_html(main_table):
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol">{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
@@ -340,7 +398,7 @@ def refresh_data():
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=15)
+scheduler.add_job(refresh_data, "interval", minutes=5)  # Change interval to 5 minutes
 scheduler.start()
 
 # Initial Data Refresh
