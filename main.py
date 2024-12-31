@@ -24,10 +24,15 @@ def scrape_nepal_exchange_data():
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, 'html.parser')
         market_summary_div = soup.find('div', class_='market-summary')
-        headings = [heading.text for heading in market_summary_div.find_all('h2')]
-        summaries = [summary.text for summary in market_summary_div.find_all('p')]
-        return list(zip(headings, summaries))
+        if market_summary_div:
+            headings = [heading.text for heading in market_summary_div.find_all('h2')]
+            summaries = [summary.text for summary in market_summary_div.find_all('p')]
+            return list(zip(headings, summaries))
+        else:
+            print("Market summary div not found.")
+            return []
     else:
+        print(f"Failed to retrieve the webpage. Status code: {response.status_code}")
         return []
 
 # Function to scrape live trading data
@@ -410,6 +415,8 @@ def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
     nepal_exchange_data = scrape_nepal_exchange_data()
+    if not nepal_exchange_data:
+        print("No Nepal Exchange data found.")
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data, nepal_exchange_data)
     upload_to_ftp(html_content)
