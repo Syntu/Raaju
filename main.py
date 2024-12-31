@@ -17,27 +17,17 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape NEPSE Alpha data
-def scrape_nepse_alpha():
-    url = "https://nepsealpha.com/live-market"
+# Function to scrape data from sharesansar
+def scrape_sharesansar():
+    url = "https://www.sharesansar.com/stock-heat-map/volume"
     response = requests.get(url)
     if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        date = soup.find('span', class_='date').text.strip()
-        current_index = soup.find('span', class_='current-index').text.strip()
-        daily_gain = soup.find('span', class_='daily-gain').text.strip()
-        turnover = soup.find('span', class_='turnover').text.strip()
-        previous_close = soup.find('span', class_='previous-close').text.strip()
-        return {
-            "Date": date,
-            "Current Index": current_index,
-            "Daily Gain": daily_gain,
-            "Turnover": turnover,
-            "Previous Close": previous_close
-        }
+        soup = BeautifulSoup(response.content, 'html.parser')
+        as_of_text = soup.find("span", class_="heatmap-as-of").text.strip()
+        nepse_index_text = soup.find("div", class_="heatmap-index").text.strip()
+        return as_of_text, nepse_index_text
     else:
-        print(f"Failed to fetch the NEPSE Alpha page. Status code: {response.status_code}")
-        return {}
+        return None, None
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -110,7 +100,7 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, nepse_alpha_data):
+def generate_html(main_table, as_of_text, nepse_index_text):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -347,17 +337,15 @@ def generate_html(main_table, nepse_alpha_data):
     </head>
     <body>
         <h1>NEPSE Data Table</h1>
-        <h2>Welcome to NEPSE stock Data</h2>
-        <div class="table-container">
-            <p><strong>Date:</strong> {nepse_alpha_data.get("Date", "N/A")}</p>
-            <p><strong>Current Index:</strong> {nepse_alpha_data.get("Current Index", "N/A")}</p>
-            <p><strong>Daily Gain:</strong> {nepse_alpha_data.get("Daily Gain", "N/A")}</p>
-            <p><strong>Turnover:</strong> {nepse_alpha_data.get("Turnover", "N/A")}</p>
-            <p><strong>Previous Close:</strong> {nepse_alpha_data.get("Previous Close", "N/A")}</p>
-        </div>
+        <h2>Welcome to Syntoo's Nepse Stock Data</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
+        </div>
+        
+        <div class="updated-time">
+            <div>As of: {as_of_text}</div>
+            <div>Nepse Index: {nepse_index_text}</div>
         </div>
 
         <div class="search-container">
@@ -419,11 +407,11 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
-    nepse_alpha_data = scrape_nepse_alpha()
+    as_of_text, nepse_index_text = scrape_sharesansar()
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, nepse_alpha_data)
+    html_content = generate_html(merged_data, as_of_text, nepse_index_text)
     upload_to_ftp(html_content)
 
 # Scheduler
