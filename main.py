@@ -1,12 +1,12 @@
 import os
-import ftplib
+import requests
+from bs4 import BeautifulSoup
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
 from datetime import datetime
-import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, render_template_string
+import ftplib
 
 app = Flask(__name__)
 
@@ -17,23 +17,41 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape Nepal Exchange data
-def scrape_nepal_exchange_data():
-    url = 'https://www.onlinekhabar.com/markets'
-    response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        market_summary_div = soup.find('div', class_='market-summary')
-        if market_summary_div:
-            headings = [heading.text for heading in market_summary_div.find_all('h2')]
-            summaries = [summary.text for summary in market_summary_div.find_all('p')]
-            return list(zip(headings, summaries))
-        else:
-            print("Market summary div not found.")
-            return []
-    else:
-        print(f"Failed to retrieve the webpage. Status code: {response.status_code}")
-        return []
+# Function to scrape NEPSE table
+def scrape_nepse_table():
+    url = "https://nepsealpha.com/live-market"
+    
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
+        # Parse the HTML content
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Find the NEPSE table (adjust selector as needed)
+        table = soup.find("table", {"id": "live-table"})  # Update 'id' if different
+        rows = table.find("tbody").find_all("tr")
+        
+        # Prepare to store scraped data
+        data_list = []
+        
+        for row in rows:
+            cols = row.find_all("td")
+            # Extract relevant columns
+            data = {
+                "Date": cols[0].text.strip(),
+                "Current": cols[1].text.strip(),
+                "Daily Gain": cols[2].text.strip(),
+                "Turnover": cols[3].text.strip(),
+                "Previous Close": cols[4].text.strip(),
+            }
+            data_list.append(data)
+        
+        return data_list
+    
+    except Exception as e:
+        return f"An error occurred: {e}"
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -106,7 +124,7 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, nepal_exchange_data):
+def generate_html(main_table, nepse_data):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -343,12 +361,16 @@ def generate_html(main_table, nepal_exchange_data):
     </head>
     <body>
         <h1>NEPSE Data Table</h1>
-        <h2>Welcome to Syntoo's Nepse Stock Data</h2>
+        <h2>Welcome to NEPSE stock Data</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        
+
+        <div class="search-container">
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
+        </div>
+
         <div class="table-container">
             <table id="nepseTable">
                 <thead>
@@ -387,18 +409,37 @@ def generate_html(main_table, nepal_exchange_data):
         </tbody>
         </table>
     </div>
-    
-    <div class="nepal-exchange-data">
-        <h2>Nepal Exchange Market Summary</h2>
-    """
-    for heading, summary in nepal_exchange_data:
-        html += f"<h3>{heading}</h3><p>{summary}</p>"
 
-    html += """
-    </div>
-    </body>
-    </html>
+    <div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Current</th>
+                <th>Daily Gain</th>
+                <th>Turnover</th>
+                <th>Previous Close</th>
+            </tr>
+        </thead>
+        <tbody>
     """
+    for entry in nepse_data:
+        html += f"""
+            <tr>
+                <td>{entry["Date"]}</td>
+                <td>{entry["Current"]}</td>
+                <td>{entry["Daily Gain"]}</td>
+                <td>{entry["Turnover"]}</td>
+                <td>{entry["Previous Close"]}</td>
+            </tr>
+        """
+    html += """
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
+"""
     return html
 
 # Upload to FTP
@@ -414,11 +455,9 @@ def upload_to_ftp(html_content):
 def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
-    nepal_exchange_data = scrape_nepal_exchange_data()
-    if not nepal_exchange_data:
-        print("No Nepal Exchange data found.")
+    nepse_data = scrape_nepse_table()
     merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, nepal_exchange_data)
+    html_content = generate_html(merged_data, nepse_data)
     upload_to_ftp(html_content)
 
 # Scheduler
