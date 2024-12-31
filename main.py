@@ -17,19 +17,18 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape Nepse value
-def scrape_nepse_value():
-    url = "https://www.sharesansar.com/stock-heat-map/volume"
+# Function to scrape Nepal Exchange data
+def scrape_nepal_exchange_data():
+    url = 'https://www.onlinekhabar.com/markets'
     response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    nepse_div = soup.find("div", class_="header-nepse-info")
-    if nepse_div:
-        nepse_value = nepse_div.find("span", class_="nepse-value").text.strip()
-        change_value = nepse_div.find("span", class_="nepse-change").text.strip()
-        percentage_change = nepse_div.find("span", class_="nepse-percent-change").text.strip()
-        return f"Nepse: {nepse_value} {change_value} {percentage_change}"
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        market_summary_div = soup.find('div', class_='market-summary')
+        headings = [heading.text for heading in market_summary_div.find_all('h2')]
+        summaries = [summary.text for summary in market_summary_div.find_all('p')]
+        return list(zip(headings, summaries))
     else:
-        return "Nepse value not found on the website"
+        return []
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -102,7 +101,7 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, nepse_value):
+def generate_html(main_table, nepal_exchange_data):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -344,13 +343,7 @@ def generate_html(main_table, nepse_value):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        <div class="nepse-value">
-            <h3>{nepse_value}</h3>
-        </div>
-        <div class="search-container">
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
-        </div>
-
+        
         <div class="table-container">
             <table id="nepseTable">
                 <thead>
@@ -389,7 +382,15 @@ def generate_html(main_table, nepse_value):
         </tbody>
         </table>
     </div>
+    
+    <div class="nepal-exchange-data">
+        <h2>Nepal Exchange Market Summary</h2>
+    """
+    for heading, summary in nepal_exchange_data:
+        html += f"<h3>{heading}</h3><p>{summary}</p>"
 
+    html += """
+    </div>
     </body>
     </html>
     """
@@ -408,9 +409,9 @@ def upload_to_ftp(html_content):
 def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
+    nepal_exchange_data = scrape_nepal_exchange_data()
     merged_data = merge_data(live_data, today_data)
-    nepse_value = scrape_nepse_value()
-    html_content = generate_html(merged_data, nepse_value)
+    html_content = generate_html(merged_data, nepal_exchange_data)
     upload_to_ftp(html_content)
 
 # Scheduler
