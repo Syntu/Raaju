@@ -17,19 +17,19 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to fetch NEPSE data
-def fetch_nepse_data():
-    url = "https://www.nepalipaisa.com/live-market"
+# Function to scrape Nepse value
+def scrape_nepse_value():
+    url = "https://www.sharesansar.com/stock-heat-map/volume"
     response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        try:
-            nepse_data = soup.find('div', class_='market-header').text.strip()
-            return nepse_data
-        except AttributeError:
-            return "Error: Could not find NEPSE data. The website structure may have changed."
+    soup = BeautifulSoup(response.content, "html.parser")
+    nepse_div = soup.find("div", class_="header-nepse-info")
+    if nepse_div:
+        nepse_value = nepse_div.find("span", class_="nepse-value").text.strip()
+        change_value = nepse_div.find("span", class_="nepse-change").text.strip()
+        percentage_change = nepse_div.find("span", class_="nepse-percent-change").text.strip()
+        return f"Nepse: {nepse_value} {change_value} {percentage_change}"
     else:
-        return f"Error: Failed to fetch data. Status code: {response.status_code}"
+        return "Nepse value not found on the website"
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -102,7 +102,7 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, nepse_data):
+def generate_html(main_table, nepse_value):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -344,7 +344,9 @@ def generate_html(main_table, nepse_data):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-
+        <div class="nepse-value">
+            <h3>{nepse_value}</h3>
+        </div>
         <div class="search-container">
             <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
@@ -383,14 +385,9 @@ def generate_html(main_table, nepse_data):
                 <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
             </tr>
         """
-    html += f"""
+    html += """
         </tbody>
         </table>
-    </div>
-
-    <div>
-        <h3>NEPSE Index Data</h3>
-        <p>{nepse_data}</p>
     </div>
 
     </body>
@@ -412,8 +409,8 @@ def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
-    nepse_data = fetch_nepse_data()
-    html_content = generate_html(merged_data, nepse_data)
+    nepse_value = scrape_nepse_value()
+    html_content = generate_html(merged_data, nepse_value)
     upload_to_ftp(html_content)
 
 # Scheduler
