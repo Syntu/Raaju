@@ -17,17 +17,17 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape data from sharesansar
-def scrape_sharesansar():
-    url = "https://www.sharesansar.com/stock-heat-map/volume"
-    response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        as_of_text = soup.find("span", class_="heatmap-as-of").text.strip()
-        nepse_index_text = soup.find("div", class_="heatmap-index").text.strip()
-        return as_of_text, nepse_index_text
-    else:
-        return None, None
+# Function to fetch NEPSE Index
+def fetch_nepse_index():
+    try:
+        url = "https://www.sharesansar.com/stock-heat-map/volume"
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        index_data = soup.find('div', class_='nepse_index').text.strip()
+        return index_data
+    except Exception as e:
+        return f"Error: {e}"
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -100,7 +100,7 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, as_of_text, nepse_index_text):
+def generate_html(main_table, nepse_index):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -110,64 +110,41 @@ def generate_html(main_table, as_of_text, nepse_index_text):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            /* Your existing CSS styles */
+            body {{ font-family: Arial, sans-serif; }}
+            h1, h2 {{ text-align: center; }}
+            h2.nepse-index {{ margin-top: 10px; color: blue; }}
         </style>
-        <script>
-            /* Your existing JavaScript functions */
-        </script>
     </head>
     <body>
         <h1>NEPSE Data Table</h1>
         <h2>Welcome to NEPSE stock Data</h2>
-        <div class="updated-time">
-            <div class="left">Updated on: {updated_time}</div>
-            <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
-        </div>
-        <div>
-            <p>As of: {as_of_text}</p>
-            <p>Nepse Index: {nepse_index_text}</p>
-        </div>
-        <div class="search-container">
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
-        </div>
-        <div class="table-container">
-            <table id="nepseTable">
-                <thead>
-                    <tr>
-                        <th>SN</th>
-                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
-                        <th onclick="sortTable(2)">LTP</th>
-                        <th onclick="sortTable(3)">Change%</th>
-                        <th onclick="sortTable(4)">Day High</th>
-                        <th onclick="sortTable(5)">Day Low</th>
-                        <th onclick="sortTable(6)">Previous Close</th>
-                        <th onclick="sortTable(7)">Volume</th>
-                        <th onclick="sortTable(8)">Turnover</th>
-                        <th onclick="sortTable(9)">52 Week High</th>
-                        <th onclick="sortTable(10)">52 Week Low</th>
-                        <th onclick="sortTable(11)">Down From High (%)</th>
-                        <th onclick="sortTable(12)">Up From Low (%)</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <h2 class="nepse-index">NEPSE Index: {nepse_index}</h2>
+        <div>Updated on: {updated_time}</div>
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th>
+                    <th>Day High</th><th>Day Low</th><th>Previous Close</th>
+                    <th>Volume</th><th>Turnover</th><th>52 Week High</th>
+                    <th>52 Week Low</th><th>Down From High (%)</th>
+                    <th>Up From Low (%)</th>
+                </tr>
+            </thead>
+            <tbody>
     """
     for row in main_table:
-        change_class = "light-red" if float(row["Change%"]) < 0 else (
-            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
-            <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
-            </tr>
+                <tr>
+                    <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                    <td>{row["Change%"]}</td><td>{row["Day High"]}</td><td>{row["Day Low"]}</td>
+                    <td>{row["Previous Close"]}</td><td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
+                    <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
+                    <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
+                </tr>
         """
     html += """
-        </tbody>
+            </tbody>
         </table>
-    </div>
     </body>
     </html>
     """
@@ -184,11 +161,11 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
-    as_of_text, nepse_index_text = scrape_sharesansar()
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
+    nepse_index = fetch_nepse_index()
     merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, as_of_text, nepse_index_text)
+    html_content = generate_html(merged_data, nepse_index)
     upload_to_ftp(html_content)
 
 # Scheduler
