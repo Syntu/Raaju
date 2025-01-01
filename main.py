@@ -25,21 +25,32 @@ PREDEFINED_INDICES = [
     {"indices": "Float Index", "value": "-", "change_point": "-", "change_percent": "-"},
 ]
 
-# Function to fetch data from the Sharehub page
+# Function to fetch data from ShareHub Nepal
 def fetch_data():
     url = "https://sharehubnepal.com/nepse/indices"
     headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # Send request to the website
     response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, "html.parser")
+    if response.status_code != 200:
+        print(f"Failed to fetch data. HTTP Status Code: {response.status_code}")
+        return []
 
-    # Locate the table containing NEPSE data
+    # Parse the HTML content
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    # Find the table
     table = soup.find("table")
+    if not table:
+        print("Table not found on the webpage.")
+        return []
+
     rows = table.find_all("tr")[1:]  # Skip header row
 
     data = []
     for row in rows:
         cols = row.find_all("td")
-        if len(cols) >= 4:
+        if len(cols) >= 4:  # Ensure there are at least 4 columns
             indices = cols[0].text.strip()
             value = cols[1].text.strip()
             change_point = cols[2].text.strip()
