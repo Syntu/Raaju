@@ -17,7 +17,7 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape data from nepsealpha.com
+# Function to scrape data from nepsealpha
 def scrape_nepsealpha():
     url = "https://nepsealpha.com/live-market"
     response = requests.get(url)
@@ -44,7 +44,7 @@ def scrape_nepsealpha():
         print(f"Failed to retrieve data from nepsealpha. HTTP Status code: {response.status_code}")
         return None
 
-# Function to scrape live trading data from sharesansar.com
+# Function to scrape live trading data
 def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
     response = requests.get(url)
@@ -65,7 +65,7 @@ def scrape_live_trading():
             })
     return data
 
-# Function to scrape today's share price summary from sharesansar.com
+# Function to scrape today's share price summary
 def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
@@ -353,36 +353,13 @@ def generate_html(main_table, nepse_data):
     <body>
         <h1>NEPSE Data Table</h1>
         <h2>Welcome to Syntoo's Nepse Stock Data</h2>
-        <div class="search-container">
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
-        </div>
-
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
 
-        <!-- New NEPSE Data Table -->
-        <div class="table-container">
-            <table id="nepseAlphaTable">
-                <thead>
-                    <tr>
-                        <th>Key</th>
-                        <th>Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-    for key, value in nepse_data.items():
-        html += f"""
-            <tr>
-                <td>{key}</td>
-                <td>{value}</td>
-            </tr>
-        """
-    html += """
-                </tbody>
-            </table>
+        <div class="search-container">
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
 
         <div class="table-container">
@@ -423,7 +400,35 @@ def generate_html(main_table, nepse_data):
         </tbody>
         </table>
     </div>
-
+    """
+    
+    if nepse_data:
+        html += """
+        <div class="nepse-data-container">
+            <h2>NEPSE Additional Data</h2>
+            <table id="nepseDataTable">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        for key, value in nepse_data.items():
+            html += f"""
+                <tr>
+                    <td>{key}</td>
+                    <td>{value}</td>
+                </tr>
+            """
+        html += """
+                </tbody>
+            </table>
+        </div>
+        """
+        
+    html += """
     </body>
     </html>
     """
@@ -440,9 +445,9 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
-    nepse_data = scrape_nepsealpha()
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
+    nepse_data = scrape_nepsealpha()
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data, nepse_data)
     upload_to_ftp(html_content)
