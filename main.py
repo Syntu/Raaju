@@ -1,10 +1,10 @@
+import requests
+from bs4 import BeautifulSoup
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
 from datetime import datetime
-import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, render_template_string
 
@@ -17,34 +17,48 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape NEPSE data from nepsealpha
+# Function to safely extract text from HTML element
+def get_element_text(soup, element_id):
+    element = soup.find('span', {'id': element_id})
+    return element.text.strip() if element else 'N/A'
+
+# Function to scrape NEPSE data
 def scrape_nepse_data():
     url = "https://nepsealpha.com/live-market"
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
+
     nepse_data = {
-        "Date": soup.find('span', {'id': 'nepse-date'}).text.strip(),
-        "Current": soup.find('span', {'id': 'nepse-current'}).text.strip(),
-        "Daily Gain": soup.find('span', {'id': 'nepse-daily-gain'}).text.strip(),
-        "Turnover": soup.find('span', {'id': 'nepse-turnover'}).text.strip(),
-        "Previous Close": soup.find('span', {'id': 'nepse-previous-close'}).text.strip()
+        "Date": get_element_text(soup, 'nepse-date'),
+        "Current": get_element_text(soup, 'nepse-current'),
+        "Daily Gain": get_element_text(soup, 'nepse-daily-gain'),
+        "Turnover": get_element_text(soup, 'nepse-turnover'),
+        "Previous Close": get_element_text(soup, 'nepse-previous-close')
     }
+
+    print("NEPSE Data:", nepse_data)
+
     market_sentiment = {
-        "Positive Stocks": soup.find('span', {'id': 'positive-stocks'}).text.strip(),
-        "Neutral Stocks": soup.find('span', {'id': 'neutral-stocks'}).text.strip(),
-        "Negative Stocks": soup.find('span', {'id': 'negative-stocks'}).text.strip()
+        "Positive Stocks": get_element_text(soup, 'positive-stocks'),
+        "Neutral Stocks": get_element_text(soup, 'neutral-stocks'),
+        "Negative Stocks": get_element_text(soup, 'negative-stocks')
     }
+
+    print("Market Sentiment:", market_sentiment)
+
     market_summary = {
-        "Total Turnover Rs": soup.find('span', {'id': 'total-turnover'}).text.strip(),
-        "Total Trade Shares": soup.find('span', {'id': 'total-trade-shares'}).text.strip(),
-        "Total Transactions": soup.find('span', {'id': 'total-transactions'}).text.strip(),
-        "Total Scrips Traded": soup.find('span', {'id': 'total-scrips-traded'}).text.strip(),
-        "Total Float Market Capitalization Rs": soup.find('span', {'id': 'total-float-market-capitalization'}).text.strip(),
-        "NEPSE Market Cap": soup.find('span', {'id': 'nepse-market-cap'}).text.strip()
+        "Total Turnover Rs": get_element_text(soup, 'total-turnover'),
+        "Total Trade Shares": get_element_text(soup, 'total-trade-shares'),
+        "Total Transactions": get_element_text(soup, 'total-transactions'),
+        "Total Scrips Traded": get_element_text(soup, 'total-scrips-traded'),
+        "Total Float Market Capitalization Rs": get_element_text(soup, 'total-float-market-capitalization'),
+        "NEPSE Market Cap": get_element_text(soup, 'nepse-market-cap')
     }
+
+    print("Market Summary:", market_summary)
     return nepse_data, market_sentiment, market_summary
 
-# Function to scrape live trading data from sharesansar
+# Function to scrape live trading data
 def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
     response = requests.get(url)
@@ -65,7 +79,7 @@ def scrape_live_trading():
             })
     return data
 
-# Function to scrape today's share price summary from sharesansar
+# Function to scrape today's share price summary
 def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
@@ -423,9 +437,6 @@ def refresh_data():
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
     upload_to_ftp(html_content)
-    print("NEPSE Data:", nepse_data)
-    print("Market Sentiment:", market_sentiment)
-    print("Market Summary:", market_summary)
 
 # Scheduler
 scheduler = BackgroundScheduler()
