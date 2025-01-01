@@ -2,7 +2,6 @@ import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
-from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -20,16 +19,19 @@ PORT = int(os.getenv("PORT", 5000))
 # Function to fetch data from the Sharesansar page
 def fetch_sharesansar_data():
     url = "https://www.sharesansar.com/stock-heat-map/volume"
-    response = requests.get(url)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, "html.parser")
 
     data = {}
     try:
-        data["as_of"] = soup.find('span', string="As of :").find_next('span').text.strip()
+        as_of = soup.find('span', string="As of :")
+        data["as_of"] = as_of.find_next('span').text.strip() if as_of else "N/A"
     except AttributeError:
         data["as_of"] = "N/A"
     try:
-        data["nepse_index"] = soup.find('span', string="NEPSE Index :").find_next('span').text.strip()
+        nepse_index = soup.find('span', string="NEPSE Index :")
+        data["nepse_index"] = nepse_index.find_next('span').text.strip() if nepse_index else "N/A"
     except AttributeError:
         data["nepse_index"] = "N/A"
     
