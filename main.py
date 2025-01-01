@@ -45,7 +45,7 @@ def fetch_sharesansar_data():
     
     return data
 
-# Function to generate HTML
+# Function to generate HTML with CSS
 def generate_html(data):
     html = f"""
     <!DOCTYPE html>
@@ -54,15 +54,49 @@ def generate_html(data):
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Sharesansar Data</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background-color: #f4f4f4;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                background-color: #fff;
+                margin-top: 20px;
+            }}
+            td {{
+                padding: 10px;
+                border: 1px solid #ddd;
+            }}
+            .text-left {{
+                text-align: left;
+                font-weight: bold;
+            }}
+            .text-bold {{
+                font-weight: bold;
+            }}
+            h1 {{
+                color: #333;
+                text-align: center;
+                font-size: 24px;
+            }}
+            #as-of, #nepse-index {{
+                color: #4CAF50;
+            }}
+        </style>
     </head>
     <body>
+        <h1>Sharesansar Stock Data</h1>
         <table>
             <tr>
-                <td class="text-left text-bold">As of</td>
+                <td class="text-left">As of</td>
                 <td id="as-of">{data['as_of']}</td>
             </tr>
             <tr>
-                <td class="text-left text-bold">NEPSE Index</td>
+                <td class="text-left">NEPSE Index</td>
                 <td id="nepse-index">{data['nepse_index']}</td>
             </tr>
         </table>
