@@ -17,33 +17,21 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to fetch data from NEPSEalpha
-def fetch_nepsealpha_data():
-    url = "https://nepsealpha.com/live-market"
+# Function to fetch data from the Sharesansar page
+def fetch_sharesansar_data():
+    url = "https://www.sharesansar.com/stock-heat-map/volume"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
 
     data = {}
     try:
-        data["date"] = soup.find('td', string="Date").find_next('td').text.strip()
+        data["as_of"] = soup.find('span', string="As of :").find_next('span').text.strip()
     except AttributeError:
-        data["date"] = "Todays Date"
+        data["as_of"] = "N/A"
     try:
-        data["current"] = soup.find('td', string="Current").find_next('td').text.strip()
+        data["nepse_index"] = soup.find('span', string="NEPSE Index :").find_next('span').text.strip()
     except AttributeError:
-        data["current"] = "N/A"
-    try:
-        data["daily_gain"] = soup.find('td', string="Daily Gain").find_next('td').text.strip()
-    except AttributeError:
-        data["daily_gain"] = "N/A"
-    try:
-        data["turnover"] = soup.find('td', string="Turnover").find_next('td').text.strip()
-    except AttributeError:
-        data["turnover"] = "N/A"
-    try:
-        data["previous_close"] = soup.find('td', string="Previous Close").find_next('td').text.strip()
-    except AttributeError:
-        data["previous_close"] = "N/A"
+        data["nepse_index"] = "N/A"
     
     return data
 
@@ -55,29 +43,17 @@ def generate_html(data):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NEPSE Data</title>
+        <title>Sharesansar Data</title>
     </head>
     <body>
         <table>
             <tr>
-                <td class="text-left text-bold">Date</td>
-                <td id="date">{data['date']}</td>
+                <td class="text-left text-bold">As of</td>
+                <td id="as-of">{data['as_of']}</td>
             </tr>
             <tr>
-                <td class="text-left text-bold">Current</td>
-                <td id="current">{data['current']}</td>
-            </tr>
-            <tr>
-                <td class="text-left text-bold line-1-3">Daily Gain</td>
-                <td id="daily-gain">{data['daily_gain']}</td>
-            </tr>
-            <tr>
-                <td class="text-left text-bold">Turnover</td>
-                <td id="turnover">{data['turnover']}</td>
-            </tr>
-            <tr>
-                <td class="text-left text-bold">Previous Close</td>
-                <td id="previous-close">{data['previous_close']}</td>
+                <td class="text-left text-bold">NEPSE Index</td>
+                <td id="nepse-index">{data['nepse_index']}</td>
             </tr>
         </table>
     </body>
@@ -96,7 +72,7 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
-    data = fetch_nepsealpha_data()
+    data = fetch_sharesansar_data()
     html_content = generate_html(data)
     upload_to_ftp(html_content)
 
