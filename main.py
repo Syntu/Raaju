@@ -7,8 +7,13 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
+import logging
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -17,11 +22,23 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
+# Check if the required environment variables are set
+if not all([FTP_HOST, FTP_USER, FTP_PASS]):
+    logger.error("FTP credentials are not set in the environment variables.")
+    exit(1)
+
 # Function to scrape data from the first source
 def scrape_first_source():
     url = "https://nepsealpha.com/live-market"
-    response = requests.get(url)
-    if response.status_code == 200:
+    
+    # Adding User-Agent header
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         data = {
             "Date": soup.select_one("td:contains('Date') + td").text.strip(),
@@ -40,8 +57,9 @@ def scrape_first_source():
             "NEPSE Market Cap": soup.select_one("th:contains('NEPSE Market Cap') + td").text.strip(),
         }
         return data
-    else:
-        raise Exception(f"Failed to retrieve data. HTTP Status code: {response.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to retrieve data: {e}")
+        return None
 
 # Function to generate HTML from the scraped data
 def generate_html(data):
@@ -84,18 +102,25 @@ def generate_html(data):
 
 # Upload to FTP
 def upload_to_ftp(html_content):
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
+    try:
+        with open("index.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+            ftp.cwd("/htdocs")
+            with open("index.html", "rb") as f:
+                ftp.storbinary("STOR index.html", f)
+        logger.info("File uploaded successfully to FTP server.")
+    except Exception as e:
+        logger.error(f"Failed to upload file to FTP server: {e}")
 
 # Refresh Data
 def refresh_data():
     data = scrape_first_source()
-    html_content = generate_html(data)
-    upload_to_ftp(html_content)
+    if data:
+        html_content = generate_html(data)
+        upload_to_ftp(html_content)
+    else:
+        logger.error("No data to upload.")
 
 # Scheduler
 scheduler = BackgroundScheduler()
