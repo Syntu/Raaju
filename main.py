@@ -6,6 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
+import random
 
 app = Flask(__name__)
 
@@ -16,92 +17,92 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to fetch data from the Sharesansar page
-def fetch_sharesansar_data():
-    url = "https://www.sharesansar.com/stock-heat-map/volume"
+# Function to fetch data from the Sharehub page
+def fetch_data():
+    url = "https://sharehubnepal.com/nepse/indices"
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, "html.parser")
 
-    data = {}
+    # Locate the table containing NEPSE data
+    table = soup.find("table")
+    rows = table.find_all("tr")[1:]  # Skip header row
 
-    try:
-        # Improved CSS selector to extract "As of"
-        as_of = soup.select_one("div.stock-heat-map > span:nth-of-type(2)")
-        data["as_of"] = as_of.text.strip() if as_of else "N/A"
-    except AttributeError:
-        data["as_of"] = "N/A"
-    
-    try:
-        # Improved CSS selector to extract "NEPSE Index"
-        nepse_index = soup.select_one("div.stock-heat-map > span:nth-of-type(4)")
-        data["nepse_index"] = nepse_index.text.strip() if nepse_index else "N/A"
-    except AttributeError:
-        data["nepse_index"] = "N/A"
-    
+    data = []
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) >= 4:
+            indices = cols[0].text.strip()
+            value = cols[1].text.strip()
+            change_point = cols[2].text.strip()
+            change_percent = cols[3].text.strip()
+            data.append({
+                "indices": indices,
+                "value": value,
+                "change_point": change_point,
+                "change_percent": change_percent
+            })
+
+    # Scramble the data
+    random.shuffle(data)
     return data
 
-# Function to generate HTML with CSS
+# Function to generate HTML table
 def generate_html(data):
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sharesansar Data</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 0;
-                padding: 20px;
-                background-color: #f4f4f4;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                background-color: #fff;
-                margin-top: 20px;
-            }}
-            td {{
-                padding: 10px;
-                border: 1px solid #ddd;
-            }}
-            .text-left {{
-                text-align: left;
-                font-weight: bold;
-            }}
-            .text-bold {{
-                font-weight: bold;
-            }}
-            h1 {{
-                color: #333;
-                text-align: center;
-                font-size: 24px;
-            }}
-            #as-of, #nepse-index {{
-                color: #4CAF50;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>Sharesansar Stock Data</h1>
-        <table>
-            <tr>
-                <td class="text-left">As of</td>
-                <td id="as-of">{data['as_of']}</td>
-            </tr>
-            <tr>
-                <td class="text-left">NEPSE Index</td>
-                <td id="nepse-index">{data['nepse_index']}</td>
-            </tr>
-        </table>
-    </body>
+    html = """
+    <html>
+        <head>
+            <title>NEPSE Indices</title>
+            <style>
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    font-family: Arial, sans-serif;
+                }
+                th, td {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f4f4f4;
+                }
+                tr:nth-child(even) {
+                    background-color: #f9f9f9;
+                }
+            </style>
+        </head>
+        <body>
+            <h2>NEPSE Indices</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Indices</th>
+                        <th>Value</th>
+                        <th>Change Point</th>
+                        <th>Change Percent</th>
+                    </tr>
+                </thead>
+                <tbody>
+    """
+    for row in data:
+        html += f"""
+        <tr>
+            <td>{row['indices']}</td>
+            <td>{row['value']}</td>
+            <td>{row['change_point']}</td>
+            <td>{row['change_percent']}</td>
+        </tr>
+        """
+    html += """
+                </tbody>
+            </table>
+        </body>
     </html>
     """
     return html
 
-# Upload to FTP
+# Upload HTML file to FTP
 def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
@@ -110,20 +111,20 @@ def upload_to_ftp(html_content):
         with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
 
-# Refresh Data
+# Refresh data and upload to FTP
 def refresh_data():
-    data = fetch_sharesansar_data()
+    data = fetch_data()
     html_content = generate_html(data)
     upload_to_ftp(html_content)
 
-# Scheduler
+# Scheduler to refresh data periodically
 scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
 scheduler.add_job(refresh_data, "cron", hour=4, minute=0)
 scheduler.start()
 
-# Initial Data Refresh
+# Initial data refresh
 refresh_data()
 
-# Keep Running
+# Keep running
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
