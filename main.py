@@ -25,59 +25,59 @@ def fetch_nepsealpha_data():
 
     data = {}
     try:
-        data["date"] = soup.select_one('td:contains("Date") + td').text.strip()
+        data["date"] = soup.find('td', text="Date").find_next_sibling('td').text.strip()
     except AttributeError:
         data["date"] = "N/A"
     try:
-        data["current"] = soup.select_one('td:contains("Current") + td').text.strip()
+        data["current"] = soup.find('td', text="Current").find_next_sibling('td').text.strip()
     except AttributeError:
         data["current"] = "N/A"
     try:
-        data["daily_gain"] = soup.select_one('td:contains("Daily Gain") + td').text.strip()
+        data["daily_gain"] = soup.find('td', text="Daily Gain").find_next_sibling('td').text.strip()
     except AttributeError:
         data["daily_gain"] = "N/A"
     try:
-        data["turnover"] = soup.select_one('td:contains("Turnover") + td').text.strip()
+        data["turnover"] = soup.find('td', text="Turnover").find_next_sibling('td').text.strip()
     except AttributeError:
         data["turnover"] = "N/A"
     try:
-        data["previous_close"] = soup.select_one('td:contains("Previous Close") + td').text.strip()
+        data["previous_close"] = soup.find('td', text="Previous Close").find_next_sibling('td').text.strip()
     except AttributeError:
         data["previous_close"] = "N/A"
     try:
-        data["positive_stocks"] = soup.select_one('td:contains("Positive Stocks") + td').text.strip()
+        data["positive_stocks"] = soup.find('td', text="Positive Stocks").find_next_sibling('td').text.strip()
     except AttributeError:
         data["positive_stocks"] = "N/A"
     try:
-        data["neutral_stocks"] = soup.select_one('td:contains("Neutral Stocks") + td').text.strip()
+        data["neutral_stocks"] = soup.find('td', text="Neutral Stocks").find_next_sibling('td').text.strip()
     except AttributeError:
         data["neutral_stocks"] = "N/A"
     try:
-        data["negative_stocks"] = soup.select_one('td:contains("Negative Stocks") + td').text.strip()
+        data["negative_stocks"] = soup.find('td', text="Negative Stocks").find_next_sibling('td').text.strip()
     except AttributeError:
         data["negative_stocks"] = "N/A"
     try:
-        data["total_turnover"] = soup.select_one('td:contains("Total Turnover Rs:") + td').text.strip()
+        data["total_turnover"] = soup.find('td', text="Total Turnover Rs:").find_next_sibling('td').text.strip()
     except AttributeError:
         data["total_turnover"] = "N/A"
     try:
-        data["total_traded_shares"] = soup.select_one('td:contains("Total Traded Shares") + td').text.strip()
+        data["total_traded_shares"] = soup.find('td', text="Total Traded Shares").find_next_sibling('td').text.strip()
     except AttributeError:
         data["total_traded_shares"] = "N/A"
     try:
-        data["total_transactions"] = soup.select_one('td:contains("Total Transactions") + td').text.strip()
+        data["total_transactions"] = soup.find('td', text="Total Transactions").find_next_sibling('td').text.strip()
     except AttributeError:
         data["total_transactions"] = "N/A"
     try:
-        data["total_scrips_traded"] = soup.select_one('td:contains("Total Scrips Traded") + td').text.strip()
+        data["total_scrips_traded"] = soup.find('td', text="Total Scrips Traded").find_next_sibling('td').text.strip()
     except AttributeError:
         data["total_scrips_traded"] = "N/A"
     try:
-        data["total_float_market_cap"] = soup.select_one('td:contains("Total Float Market Capitalization Rs:") + td').text.strip()
+        data["total_float_market_cap"] = soup.find('td', text="Total Float Market Capitalization Rs:").find_next_sibling('td').text.strip()
     except AttributeError:
         data["total_float_market_cap"] = "N/A"
     try:
-        data["nepse_market_cap"] = soup.select_one('td:contains("NEPSE Market Cap") + td').text.strip()
+        data["nepse_market_cap"] = soup.find('td', text="NEPSE Market Cap").find_next_sibling('td').text.strip()
     except AttributeError:
         data["nepse_market_cap"] = "N/A"
 
