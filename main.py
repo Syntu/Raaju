@@ -22,23 +22,65 @@ def fetch_nepsealpha_data():
     url = "https://nepsealpha.com/live-market"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    
-    data = {
-        "date": soup.select_one('td:contains("Date") + td').text.strip(),
-        "current": soup.select_one('td:contains("Current") + td').text.strip(),
-        "daily_gain": soup.select_one('td:contains("Daily Gain") + td').text.strip(),
-        "turnover": soup.select_one('td:contains("Turnover") + td').text.strip(),
-        "previous_close": soup.select_one('td:contains("Previous Close") + td').text.strip(),
-        "positive_stocks": soup.select_one('td:contains("Positive Stocks") + td').text.strip(),
-        "neutral_stocks": soup.select_one('td:contains("Neutral Stocks") + td').text.strip(),
-        "negative_stocks": soup.select_one('td:contains("Negative Stocks") + td').text.strip(),
-        "total_turnover": soup.select_one('td:contains("Total Turnover Rs:") + td').text.strip(),
-        "total_traded_shares": soup.select_one('td:contains("Total Traded Shares") + td').text.strip(),
-        "total_transactions": soup.select_one('td:contains("Total Transactions") + td').text.strip(),
-        "total_scrips_traded": soup.select_one('td:contains("Total Scrips Traded") + td').text.strip(),
-        "total_float_market_cap": soup.select_one('td:contains("Total Float Market Capitalization Rs:") + td').text.strip(),
-        "nepse_market_cap": soup.select_one('td:contains("NEPSE Market Cap") + td').text.strip(),
-    }
+
+    data = {}
+    try:
+        data["date"] = soup.select_one('td:contains("Date") + td').text.strip()
+    except AttributeError:
+        data["date"] = "N/A"
+    try:
+        data["current"] = soup.select_one('td:contains("Current") + td').text.strip()
+    except AttributeError:
+        data["current"] = "N/A"
+    try:
+        data["daily_gain"] = soup.select_one('td:contains("Daily Gain") + td').text.strip()
+    except AttributeError:
+        data["daily_gain"] = "N/A"
+    try:
+        data["turnover"] = soup.select_one('td:contains("Turnover") + td').text.strip()
+    except AttributeError:
+        data["turnover"] = "N/A"
+    try:
+        data["previous_close"] = soup.select_one('td:contains("Previous Close") + td').text.strip()
+    except AttributeError:
+        data["previous_close"] = "N/A"
+    try:
+        data["positive_stocks"] = soup.select_one('td:contains("Positive Stocks") + td').text.strip()
+    except AttributeError:
+        data["positive_stocks"] = "N/A"
+    try:
+        data["neutral_stocks"] = soup.select_one('td:contains("Neutral Stocks") + td').text.strip()
+    except AttributeError:
+        data["neutral_stocks"] = "N/A"
+    try:
+        data["negative_stocks"] = soup.select_one('td:contains("Negative Stocks") + td').text.strip()
+    except AttributeError:
+        data["negative_stocks"] = "N/A"
+    try:
+        data["total_turnover"] = soup.select_one('td:contains("Total Turnover Rs:") + td').text.strip()
+    except AttributeError:
+        data["total_turnover"] = "N/A"
+    try:
+        data["total_traded_shares"] = soup.select_one('td:contains("Total Traded Shares") + td').text.strip()
+    except AttributeError:
+        data["total_traded_shares"] = "N/A"
+    try:
+        data["total_transactions"] = soup.select_one('td:contains("Total Transactions") + td').text.strip()
+    except AttributeError:
+        data["total_transactions"] = "N/A"
+    try:
+        data["total_scrips_traded"] = soup.select_one('td:contains("Total Scrips Traded") + td').text.strip()
+    except AttributeError:
+        data["total_scrips_traded"] = "N/A"
+    try:
+        data["total_float_market_cap"] = soup.select_one('td:contains("Total Float Market Capitalization Rs:") + td').text.strip()
+    except AttributeError:
+        data["total_float_market_cap"] = "N/A"
+    try:
+        data["nepse_market_cap"] = soup.select_one('td:contains("NEPSE Market Cap") + td').text.strip()
+    except AttributeError:
+        data["nepse_market_cap"] = "N/A"
+
     return data
 
 # Function to generate HTML
