@@ -143,7 +143,9 @@ def upload_to_ftp(html_content):
 # Refresh data and upload to FTP
 def refresh_data():
     data = fetch_data()
+    print("Fetched Data:", data)  # Print fetched data for debugging
     html_content = generate_html(data)
+    print("Generated HTML:", html_content)  # Print generated HTML for debugging
     upload_to_ftp(html_content)
 
 # Scheduler to refresh data periodically
