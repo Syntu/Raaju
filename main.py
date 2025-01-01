@@ -203,8 +203,8 @@ def refresh_data():
     upload_to_ftp(html_content)
 
 # Scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=15)
+scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
+scheduler.add_job(refresh_data, "cron", hour=4, minute=0)
 scheduler.start()
 
 # Initial Data Refresh
