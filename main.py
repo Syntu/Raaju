@@ -23,14 +23,22 @@ def fetch_sharesansar_data():
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, "html.parser")
 
+    # Debugging: print the status code and HTML content to check the structure
+    print("Response Status Code:", response.status_code)
+    print("HTML Content:\n", response.text[:1000])  # Print first 1000 characters to check the structure
+
     data = {}
+
     try:
-        as_of = soup.find('span', string="As of :")
+        # Improved CSS selector to extract "As of"
+        as_of = soup.find('span', text="As of :")
         data["as_of"] = as_of.find_next('span').text.strip() if as_of else "N/A"
     except AttributeError:
         data["as_of"] = "N/A"
+    
     try:
-        nepse_index = soup.find('span', string="NEPSE Index :")
+        # Improved CSS selector to extract "NEPSE Index"
+        nepse_index = soup.find('span', text="NEPSE Index :")
         data["nepse_index"] = nepse_index.find_next('span').text.strip() if nepse_index else "N/A"
     except AttributeError:
         data["nepse_index"] = "N/A"
