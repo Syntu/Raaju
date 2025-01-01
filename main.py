@@ -17,6 +17,14 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
+# Predefined indices to always include
+PREDEFINED_INDICES = [
+    {"indices": "NEPSE Index", "value": "-", "change_point": "-", "change_percent": "-"},
+    {"indices": "Sensitive index", "value": "-", "change_point": "-", "change_percent": "-"},
+    {"indices": "Sensitive Float index", "value": "-", "change_point": "-", "change_percent": "-"},
+    {"indices": "Float Index", "value": "-", "change_point": "-", "change_percent": "-"},
+]
+
 # Function to fetch data from the Sharehub page
 def fetch_data():
     url = "https://sharehubnepal.com/nepse/indices"
@@ -45,7 +53,17 @@ def fetch_data():
 
     # Scramble the data
     random.shuffle(data)
-    return data
+
+    # Ensure predefined indices are included and update their values if available
+    for predefined in PREDEFINED_INDICES:
+        for fetched in data:
+            if fetched["indices"] == predefined["indices"]:
+                predefined.update(fetched)
+                break
+
+    # Combine predefined and fetched data
+    all_data = PREDEFINED_INDICES + [row for row in data if row["indices"] not in {p["indices"] for p in PREDEFINED_INDICES}]
+    return all_data
 
 # Function to generate HTML table
 def generate_html(data):
