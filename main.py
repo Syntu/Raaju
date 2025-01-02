@@ -1,14 +1,13 @@
 import os
-import ftplib
-from apscheduler.schedulers.background import BackgroundScheduler
-import requests
+import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
-import random
-import logging
-
-app = Flask(__name__)
+from apscheduler.schedulers.background import BackgroundScheduler
+import ftplib
 
 # Load environment variables
 load_dotenv()
@@ -17,7 +16,10 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Predefined indices to always include
+# Flask app
+app = Flask(__name__)
+
+# Predefined indices
 PREDEFINED_INDICES = [
     {"indices": "NEPSE Index", "value": "-", "change_point": "-", "change_percent": "-"},
     {"indices": "Sensitive index", "value": "-", "change_point": "-", "change_percent": "-"},
@@ -25,29 +27,25 @@ PREDEFINED_INDICES = [
     {"indices": "Float Index", "value": "-", "change_point": "-", "change_percent": "-"},
 ]
 
-# Set up logging
+# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Function to fetch data from ShareHub Nepal
+# Fetch data using Selenium
 def fetch_data():
     url = "https://sharehubnepal.com/nepse/indices"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--no-sandbox')
 
     try:
-        # Send request to the website
-        response = requests.get(url, headers=headers, timeout=10)
-        logging.info("Response Status Code: %s", response.status_code)
-
-        if response.status_code != 200:
-            logging.error("Failed to fetch data. HTTP Status Code: %s", response.status_code)
-            return []
-
-        # Parse the HTML content
-        soup = BeautifulSoup(response.content, "html.parser")
-        logging.info("Parsing HTML content...")
+        # Selenium driver setup
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        driver.get(url)
         
-        # Debug: Print part of the HTML
-        logging.debug("HTML Preview: %s", response.content[:500])
+        # Parse the page source with BeautifulSoup
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        driver.quit()
         
         # Find the table
         table = soup.find("table")
@@ -56,12 +54,10 @@ def fetch_data():
             return []
 
         rows = table.find_all("tr")[1:]  # Skip header row
-        logging.info("Found %d rows in the table.", len(rows))
-
         data = []
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) >= 4:  # Ensure there are at least 4 columns
+            if len(cols) >= 4:
                 indices = cols[0].text.strip()
                 value = cols[1].text.strip()
                 change_point = cols[2].text.strip()
@@ -73,36 +69,24 @@ def fetch_data():
                     "change_percent": change_percent
                 })
 
-        logging.info("Fetched Data: %s", data)
+        logging.info("Data fetched successfully: %s", data)
         return data
 
     except Exception as e:
-        logging.error("Error fetching or parsing data: %s", str(e))
+        logging.error("Error fetching data: %s", str(e))
         return []
 
-# Function to generate HTML table
+# Generate HTML table
 def generate_html(data):
     html = """
     <html>
         <head>
             <title>NEPSE Indices</title>
             <style>
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                    font-family: Arial, sans-serif;
-                }
-                th, td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: left;
-                }
-                th {
-                    background-color: #f4f4f4;
-                }
-                tr:nth-child(even) {
-                    background-color: #f9f9f9;
-                }
+                table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f4f4f4; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
             </style>
         </head>
         <body>
@@ -135,7 +119,7 @@ def generate_html(data):
     """
     return html
 
-# Upload HTML file to FTP
+# Upload to FTP
 def upload_to_ftp(html_content):
     try:
         with open("index.html", "w", encoding="utf-8") as f:
@@ -150,7 +134,7 @@ def upload_to_ftp(html_content):
     except Exception as e:
         logging.error("Error uploading to FTP: %s", str(e))
 
-# Refresh data and upload to FTP
+# Refresh data and upload
 def refresh_data():
     data = fetch_data()
     if data:
@@ -160,7 +144,7 @@ def refresh_data():
     else:
         logging.error("No data fetched to upload.")
 
-# Scheduler to refresh data periodically
+# Scheduler setup
 scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
 scheduler.add_job(refresh_data, "cron", hour=4, minute=0)
 scheduler.start()
@@ -168,6 +152,6 @@ scheduler.start()
 # Initial data refresh
 refresh_data()
 
-# Keep running
+# Flask app run
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
