@@ -7,3 +7,4 @@ pytz
 selenium
 webdriver-manager
 ChromeDriver
+gunicorn
