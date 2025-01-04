@@ -1,5 +1,6 @@
 import os
 import logging
+import ftplib
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -7,7 +8,6 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
-import ftplib
 
 # Load environment variables
 load_dotenv()
@@ -18,14 +18,6 @@ PORT = int(os.getenv("PORT", 5000))
 
 # Flask app
 app = Flask(__name__)
-
-# Predefined indices
-PREDEFINED_INDICES = [
-    {"indices": "NEPSE Index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Sensitive index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Sensitive Float index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Float Index", "value": "-", "change_point": "-", "change_percent": "-"},
-]
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -46,35 +38,30 @@ def fetch_data():
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         driver.get(url)
         
-        # Parse the page source with BeautifulSoup
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+        # Wait for the page to load
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         driver.quit()
         
-        # Find the table
-        table = soup.find("table")
+        # Find table data
+        table = soup.find('table', {'id': 'indices'})
         if not table:
             logging.error("Table not found on the webpage.")
             return []
-
-        rows = table.find_all("tr")[1:]  # Skip header row
-        data = []
+        
+        rows = table.find_all('tr')[1:]  # Skip header row
+        indices_data = []
         for row in rows:
-            cols = row.find_all("td")
-            if len(cols) >= 4:
-                indices = cols[0].text.strip()
-                value = cols[1].text.strip()
-                change_point = cols[2].text.strip()
-                change_percent = cols[3].text.strip()
-                data.append({
-                    "indices": indices,
-                    "value": value,
-                    "change_point": change_point,
-                    "change_percent": change_percent
+            columns = row.find_all('td')
+            if len(columns) >= 6:
+                indices_data.append({
+                    "Indices": columns[0].text.strip(),
+                    "Value": columns[1].text.strip(),
+                    "Ch": columns[2].text.strip(),
+                    "Ch%": columns[3].text.strip(),
+                    "HIGH": columns[4].text.strip(),
+                    "LOW": columns[5].text.strip(),
                 })
-
-        logging.info("Data fetched successfully: %s", data)
-        return data
-
+        return indices_data
     except Exception as e:
         logging.error("Error fetching data: %s", str(e))
         return []
@@ -83,41 +70,51 @@ def fetch_data():
 def generate_html(data):
     html = """
     <html>
-        <head>
-            <title>NEPSE Indices</title>
-            <style>
-                table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f4f4f4; }
-                tr:nth-child(even) { background-color: #f9f9f9; }
-            </style>
-        </head>
-        <body>
-            <h2>NEPSE Indices</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Indices</th>
-                        <th>Value</th>
-                        <th>Change Point</th>
-                        <th>Change Percent</th>
-                    </tr>
-                </thead>
-                <tbody>
+    <head>
+        <title>NEPSE Indices</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            table, th, td {
+                border: 1px solid black;
+            }
+            th, td {
+                padding: 10px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>NEPSE Indices</h1>
+        <table>
+            <tr>
+                <th>Indices</th>
+                <th>Value</th>
+                <th>Ch</th>
+                <th>Ch%</th>
+                <th>HIGH</th>
+                <th>LOW</th>
+            </tr>
     """
     for row in data:
         html += f"""
         <tr>
-            <td>{row['indices']}</td>
-            <td>{row['value']}</td>
-            <td>{row['change_point']}</td>
-            <td>{row['change_percent']}</td>
+            <td>{row['Indices']}</td>
+            <td>{row['Value']}</td>
+            <td>{row['Ch']}</td>
+            <td>{row['Ch%']}</td>
+            <td>{row['HIGH']}</td>
+            <td>{row['LOW']}</td>
         </tr>
         """
     html += """
-                </tbody>
-            </table>
-        </body>
+        </table>
+    </body>
     </html>
     """
     return html
