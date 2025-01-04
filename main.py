@@ -1,36 +1,37 @@
 import os
-import requests
 import ftplib
+from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone
+from datetime import datetime
+import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
+from flask import Flask, render_template_string
+import json
+
+app = Flask(__name__)
 
 # Load environment variables
 load_dotenv()
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
+PORT = int(os.getenv("PORT", 5000))
 
-def fetch_nepse_indices_with_selenium():
+# Fetch NEPSE data function
+def fetch_nepse_indices():
     url = "https://sharehubnepal.com/nepse/indices"
-    
-    # Setup Selenium WebDriver
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Run in headless mode (no UI)
-    
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.get(url)
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
-    # Wait for the page to load completely (if necessary)
-    driver.implicitly_wait(10)  # Wait for up to 10 seconds
+    # Send request to the website
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"Failed to fetch the webpage. Status Code: {response.status_code}")
+        return []
 
-    # Get page source and parse with BeautifulSoup
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
-    
-    driver.quit()  # Close the browser
-    
+    # Parse the HTML content
+    soup = BeautifulSoup(response.text, 'html.parser')
+
     # Find the table
     table = soup.find('table', {'class': 'min-w-max w-full caption-bottom border-collapse'})
     if not table:
@@ -39,10 +40,10 @@ def fetch_nepse_indices_with_selenium():
 
     # Extract data from the table
     indices_data = []
-    rows = table.find('tbody').find_all('tr')
+    rows = table.find('tbody').find_all('tr')  # Locate all rows inside <tbody>
     for row in rows:
         columns = row.find_all('td')
-        if len(columns) >= 6:
+        if len(columns) >= 6:  # Ensure there are enough columns
             indices = columns[0].text.strip()
             value = columns[1].text.strip()
             ch = columns[2].text.strip()
@@ -58,36 +59,46 @@ def fetch_nepse_indices_with_selenium():
                 "HIGH": high if high != "N/A" else None,
                 "LOW": low if low != "N/A" else None
             })
-    
+
     return indices_data
 
-def save_to_html(data):
-    # HTML structure
-    html_content = """
+# Function to generate HTML
+def generate_html(main_table):
+    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NEPSE Indices</title>
+        <title>NEPSE Indices Data</title>
         <style>
-            table {
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }}
+            table {{
                 width: 100%;
                 border-collapse: collapse;
-                margin: 20px 0;
-                font-size: 1em;
-                text-align: left;
-            }
-            th, td {
-                padding: 12px 15px;
+            }}
+            th, td {{
+                padding: 8px 12px;
+                text-align: center;
                 border: 1px solid #ddd;
-            }
-            th {
+            }}
+            th {{
                 background-color: #f4f4f4;
-            }
-            tr:nth-child(even) {
-                background-color: #f9f9f9;
-            }
+            }}
+            h1 {{
+                text-align: center;
+                color: #333;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 20px;
+                font-size: 0.9em;
+                color: #777;
+            }}
         </style>
     </head>
     <body>
@@ -97,59 +108,72 @@ def save_to_html(data):
                 <tr>
                     <th>Indices</th>
                     <th>Value</th>
-                    <th>Ch</th>
-                    <th>Ch%</th>
+                    <th>Change</th>
+                    <th>Change (%)</th>
                     <th>High</th>
                     <th>Low</th>
                 </tr>
             </thead>
             <tbody>
     """
-
-    # Add data to HTML table
-    for item in data:
-        html_content += f"""
+    
+    # Add the data rows
+    for data in main_table:
+        html += f"""
         <tr>
-            <td>{item['Indices']}</td>
-            <td>{item['Value']}</td>
-            <td>{item['Ch']}</td>
-            <td>{item['Ch%']}</td>
-            <td>{item['HIGH'] if item['HIGH'] else 'N/A'}</td>
-            <td>{item['LOW'] if item['LOW'] else 'N/A'}</td>
+            <td>{data['Indices']}</td>
+            <td>{data['Value']}</td>
+            <td>{data['Ch']}</td>
+            <td>{data['Ch%']}</td>
+            <td>{data['HIGH'] if data['HIGH'] else "N/A"}</td>
+            <td>{data['LOW'] if data['LOW'] else "N/A"}</td>
         </tr>
         """
-
-    # Close HTML structure
-    html_content += """
+    
+    # Close table and add footer
+    html += f"""
             </tbody>
         </table>
+        <div class="footer">Data last updated: {updated_time}</div>
     </body>
     </html>
     """
+    return html
 
-    # Save HTML to a file
-    with open('nepse_indices.html', 'w', encoding='utf-8') as file:
-        file.write(html_content)
+# Upload to FTP
+def upload_to_ftp(html_content):
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
-    print("HTML file has been saved as 'nepse_indices.html'.")
-    return 'nepse_indices.html'
+# Refresh Data
+def refresh_data():
+    data = fetch_nepse_indices()
+    if data:
+        html_content = generate_html(data)
+        upload_to_ftp(html_content)
 
-def upload_to_ftp(file_path):
-    try:
-        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")  # Change directory to target folder
-            with open(file_path, "rb") as file:
-                ftp.storbinary(f"STOR index.html", file)
-        print("File successfully uploaded to FTP.")
-    except Exception as e:
-        print(f"Failed to upload file to FTP: {str(e)}")
+# Scheduler to run the refresh every 5 minutes
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_data, "interval", minutes=5)
+scheduler.start()
 
-# Fetch data with Selenium
-data = fetch_nepse_indices_with_selenium()
+# Initial Data Refresh
+refresh_data()
 
-# Save data to HTML and upload to FTP
-if data:
-    html_file = save_to_html(data)
-    upload_to_ftp(html_file)
-else:
-    print("No data fetched.")
+# Flask App to serve the page
+@app.route('/')
+def index():
+    data = fetch_nepse_indices()
+    if data:
+        html_content = generate_html(data)
+        return render_template_string(html_content)
+    else:
+        return "Failed to fetch data."
+
+# Keep Running
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)
