@@ -19,14 +19,6 @@ PORT = int(os.getenv("PORT", 5000))
 # Flask app
 app = Flask(__name__)
 
-# Predefined indices
-PREDEFINED_INDICES = [
-    {"indices": "NEPSE Index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Sensitive index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Sensitive Float index", "value": "-", "change_point": "-", "change_percent": "-"},
-    {"indices": "Float Index", "value": "-", "change_point": "-", "change_percent": "-"},
-]
-
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -57,16 +49,20 @@ def fetch_data():
         data = []
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) >= 4:
+            if len(cols) >= 6:  # Checking for all required columns
                 indices = cols[0].text.strip()
                 value = cols[1].text.strip()
-                change_point = cols[2].text.strip()
-                change_percent = cols[3].text.strip()
+                ch = cols[2].text.strip()
+                ch_percent = cols[3].text.strip()
+                high = cols[4].text.strip()
+                low = cols[5].text.strip()
                 data.append({
                     "indices": indices,
                     "value": value,
-                    "change_point": change_point,
-                    "change_percent": change_percent
+                    "ch": ch,
+                    "ch_percent": ch_percent,
+                    "high": high,
+                    "low": low
                 })
 
         logging.info("Data fetched successfully: %s", data)
@@ -98,6 +94,8 @@ def generate_html(data):
                         <th>Value</th>
                         <th>Change Point</th>
                         <th>Change Percent</th>
+                        <th>High</th>
+                        <th>Low</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -107,8 +105,10 @@ def generate_html(data):
         <tr>
             <td>{row['indices']}</td>
             <td>{row['value']}</td>
-            <td>{row['change_point']}</td>
-            <td>{row['change_percent']}</td>
+            <td>{row['ch']}</td>
+            <td>{row['ch_percent']}</td>
+            <td>{row['high']}</td>
+            <td>{row['low']}</td>
         </tr>
         """
     html += """
