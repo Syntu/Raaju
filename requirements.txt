@@ -7,4 +7,3 @@ pytz
 selenium
 webdriver-manager
 ChromeDriver
-ftplib
