@@ -18,7 +18,7 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Fetch NEPSE data function
+# Fetch NEPSE data function with error handling
 def fetch_nepse_indices():
     url = "https://sharehubnepal.com/nepse/indices"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -32,13 +32,26 @@ def fetch_nepse_indices():
     # Parse the HTML content
     soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Find the table
+    # Try to find the table with specific class first
     table = soup.find('table', {'class': 'min-w-max w-full caption-bottom border-collapse'})
     if not table:
-        print("Table not found. Verify the table class.")
-        return []
+        print("Table with specified class not found. Trying other methods to extract data.")
+        # Fallback: Try to find JSON or other structured data in the page (like a <script> tag)
+        script_tag = soup.find('script', text=lambda t: t and 'var indexData' in t)
+        if script_tag:
+            # Extract JSON from the script tag (if present)
+            json_data = script_tag.string.split('var indexData = ')[-1].split('};')[0] + '}'
+            try:
+                indices_data = json.loads(json_data)
+            except json.JSONDecodeError:
+                print("Error decoding JSON data from the script tag.")
+                return []
+            return indices_data
+        else:
+            print("No JSON data or table found.")
+            return []
 
-    # Extract data from the table
+    # Extract data from the table if found
     indices_data = []
     rows = table.find('tbody').find_all('tr')  # Locate all rows inside <tbody>
     for row in rows:
@@ -140,14 +153,18 @@ def generate_html(main_table):
     """
     return html
 
-# Upload to FTP
+# Upload to FTP with error handling
 def upload_to_ftp(html_content):
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
+    try:
+        with open("index.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+            ftp.cwd("/htdocs")  # Ensure this is the correct directory
+            with open("index.html", "rb") as f:
+                ftp.storbinary("STOR index.html", f)
+        print("Successfully uploaded index.html to the server.")
+    except Exception as e:
+        print(f"Error uploading to FTP: {e}")
 
 # Refresh Data
 def refresh_data():
