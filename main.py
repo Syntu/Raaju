@@ -1,157 +1,147 @@
 import os
-import logging
+import requests
 import ftplib
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask
-from apscheduler.schedulers.background import BackgroundScheduler
 
 # Load environment variables
 load_dotenv()
 FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
-PORT = int(os.getenv("PORT", 5000))
 
-# Flask app
-app = Flask(__name__)
-
-# Logging setup
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Fetch data using Selenium
-def fetch_data():
+def fetch_nepse_indices():
     url = "https://sharehubnepal.com/nepse/indices"
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    
-    # Set the binary location of Google Chrome for Render environment
-    options.binary_location = "/usr/bin/google-chrome"  # Adjust path as needed for your environment
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
-    try:
-        # Selenium driver setup
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.get(url)
-        
-        # Wait for the page to load
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        driver.quit()
-        
-        # Find table data
-        table = soup.find('table', {'id': 'indices'})
-        if not table:
-            logging.error("Table not found on the webpage.")
-            return []
-        
-        rows = table.find_all('tr')[1:]  # Skip header row
-        indices_data = []
-        for row in rows:
-            columns = row.find_all('td')
-            if len(columns) >= 6:
-                indices_data.append({
-                    "Indices": columns[0].text.strip(),
-                    "Value": columns[1].text.strip(),
-                    "Ch": columns[2].text.strip(),
-                    "Ch%": columns[3].text.strip(),
-                    "HIGH": columns[4].text.strip(),
-                    "LOW": columns[5].text.strip(),
-                })
-        return indices_data
-    except Exception as e:
-        logging.error("Error fetching data: %s", str(e))
+    # Send request to the website
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"Failed to fetch the webpage. Status Code: {response.status_code}")
         return []
 
-# Generate HTML table
-def generate_html(data):
-    html = """
-    <html>
+    # Parse the HTML content
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find the table
+    table = soup.find('table', {'class': 'min-w-max w-full caption-bottom border-collapse'})
+    if not table:
+        print("Table not found. Verify the table class.")
+        return []
+
+    # Extract data from the table
+    indices_data = []
+    rows = table.find('tbody').find_all('tr')  # Locate all rows inside <tbody>
+    for row in rows:
+        columns = row.find_all('td')
+        if len(columns) >= 6:  # Ensure there are enough columns
+            indices = columns[0].text.strip()
+            value = columns[1].text.strip()
+            ch = columns[2].text.strip()
+            ch_percent = columns[3].text.strip()
+            high = columns[4].text.strip()
+            low = columns[5].text.strip()
+
+            indices_data.append({
+                "Indices": indices,
+                "Value": value,
+                "Ch": ch,
+                "Ch%": ch_percent,
+                "HIGH": high if high != "N/A" else None,
+                "LOW": low if low != "N/A" else None
+            })
+
+    return indices_data
+
+def save_to_html(data):
+    # HTML structure
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Indices</title>
         <style>
             table {
                 width: 100%;
                 border-collapse: collapse;
-            }
-            table, th, td {
-                border: 1px solid black;
-            }
-            th, td {
-                padding: 10px;
+                margin: 20px 0;
+                font-size: 1em;
                 text-align: left;
             }
+            th, td {
+                padding: 12px 15px;
+                border: 1px solid #ddd;
+            }
             th {
-                background-color: #f2f2f2;
+                background-color: #f4f4f4;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
             }
         </style>
     </head>
     <body>
         <h1>NEPSE Indices</h1>
         <table>
-            <tr>
-                <th>Indices</th>
-                <th>Value</th>
-                <th>Ch</th>
-                <th>Ch%</th>
-                <th>HIGH</th>
-                <th>LOW</th>
-            </tr>
+            <thead>
+                <tr>
+                    <th>Indices</th>
+                    <th>Value</th>
+                    <th>Ch</th>
+                    <th>Ch%</th>
+                    <th>High</th>
+                    <th>Low</th>
+                </tr>
+            </thead>
+            <tbody>
     """
-    for row in data:
-        html += f"""
+
+    # Add data to HTML table
+    for item in data:
+        html_content += f"""
         <tr>
-            <td>{row['Indices']}</td>
-            <td>{row['Value']}</td>
-            <td>{row['Ch']}</td>
-            <td>{row['Ch%']}</td>
-            <td>{row['HIGH']}</td>
-            <td>{row['LOW']}</td>
+            <td>{item['Indices']}</td>
+            <td>{item['Value']}</td>
+            <td>{item['Ch']}</td>
+            <td>{item['Ch%']}</td>
+            <td>{item['HIGH'] if item['HIGH'] else 'N/A'}</td>
+            <td>{item['LOW'] if item['LOW'] else 'N/A'}</td>
         </tr>
         """
-    html += """
+
+    # Close HTML structure
+    html_content += """
+            </tbody>
         </table>
     </body>
     </html>
     """
-    return html
 
-# Upload to FTP
-def upload_to_ftp(html_content):
+    # Save HTML to a file
+    with open('nepse_indices.html', 'w', encoding='utf-8') as file:
+        file.write(html_content)
+
+    print("HTML file has been saved as 'nepse_indices.html'.")
+    return 'nepse_indices.html'
+
+def upload_to_ftp(file_path):
     try:
-        with open("index.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-
         with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")
-            with open("index.html", "rb") as f:
-                ftp.storbinary("STOR index.html", f)
-
-        logging.info("Successfully uploaded HTML file to FTP.")
+            ftp.cwd("/htdocs")  # Change directory to target folder
+            with open(file_path, "rb") as file:
+                ftp.storbinary(f"STOR index.html", file)
+        print("File successfully uploaded to FTP.")
     except Exception as e:
-        logging.error("Error uploading to FTP: %s", str(e))
+        print(f"Failed to upload file to FTP: {str(e)}")
 
-# Refresh data and upload
-def refresh_data():
-    data = fetch_data()
-    if data:
-        html_content = generate_html(data)
-        logging.info("Generated HTML content.")
-        upload_to_ftp(html_content)
-    else:
-        logging.error("No data fetched to upload.")
+# Fetch data
+data = fetch_nepse_indices()
 
-# Scheduler setup
-scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
-scheduler.add_job(refresh_data, "cron", hour=4, minute=0)
-scheduler.start()
-
-# Initial data refresh
-refresh_data()
-
-# Flask app run
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+# Save data to HTML and upload to FTP
+if data:
+    html_file = save_to_html(data)
+    upload_to_ftp(html_file)
+else:
+    print("No data fetched to save or upload.")
