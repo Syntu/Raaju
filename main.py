@@ -2,6 +2,9 @@ import os
 import requests
 import ftplib
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -10,19 +13,24 @@ FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 
-def fetch_nepse_indices():
+def fetch_nepse_indices_with_selenium():
     url = "https://sharehubnepal.com/nepse/indices"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    
+    # Setup Selenium WebDriver
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run in headless mode (no UI)
+    
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.get(url)
 
-    # Send request to the website
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"Failed to fetch the webpage. Status Code: {response.status_code}")
-        return []
+    # Wait for the page to load completely (if necessary)
+    driver.implicitly_wait(10)  # Wait for up to 10 seconds
 
-    # Parse the HTML content
-    soup = BeautifulSoup(response.text, 'html.parser')
-
+    # Get page source and parse with BeautifulSoup
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    
+    driver.quit()  # Close the browser
+    
     # Find the table
     table = soup.find('table', {'class': 'min-w-max w-full caption-bottom border-collapse'})
     if not table:
@@ -31,10 +39,10 @@ def fetch_nepse_indices():
 
     # Extract data from the table
     indices_data = []
-    rows = table.find('tbody').find_all('tr')  # Locate all rows inside <tbody>
+    rows = table.find('tbody').find_all('tr')
     for row in rows:
         columns = row.find_all('td')
-        if len(columns) >= 6:  # Ensure there are enough columns
+        if len(columns) >= 6:
             indices = columns[0].text.strip()
             value = columns[1].text.strip()
             ch = columns[2].text.strip()
@@ -50,7 +58,7 @@ def fetch_nepse_indices():
                 "HIGH": high if high != "N/A" else None,
                 "LOW": low if low != "N/A" else None
             })
-
+    
     return indices_data
 
 def save_to_html(data):
@@ -136,12 +144,12 @@ def upload_to_ftp(file_path):
     except Exception as e:
         print(f"Failed to upload file to FTP: {str(e)}")
 
-# Fetch data
-data = fetch_nepse_indices()
+# Fetch data with Selenium
+data = fetch_nepse_indices_with_selenium()
 
 # Save data to HTML and upload to FTP
 if data:
     html_file = save_to_html(data)
     upload_to_ftp(html_file)
 else:
-    print("No data fetched to save or upload.")
+    print("No data fetched.")
