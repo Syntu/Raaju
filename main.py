@@ -66,6 +66,12 @@ def scrape_with_selenium():
         driver.get("https://www.sharesansar.com/stock-heat-map/volume")
         time.sleep(5)  # Wait for the page to load
 
+        # Output the full HTML to debug
+        html = driver.page_source
+        print("Selenium Loaded HTML:")
+        print(html)  # Full HTML output
+
+        # Find the elements by class name
         date_element = driver.find_element(By.CLASS_NAME, "dDate")
         index_element = driver.find_element(By.CLASS_NAME, "dIndex")
 
