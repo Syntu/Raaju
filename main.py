@@ -5,8 +5,8 @@ import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
