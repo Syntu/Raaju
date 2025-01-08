@@ -2,12 +2,15 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import ftplib
 import os
 import logging
-import time
-from flask import Flask
+import traceback
+from flask import Flask, jsonify
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Load environment variables
 load_dotenv()
@@ -33,26 +36,24 @@ def scrape_nepse_data():
         options.add_argument("--disable-dev-shm-usage")
         
         # ChromeDriver path
-        service = Service('/usr/local/bin/chromedriver')
+        service = Service('/usr/local/bin/chromedriver')  # Update this path if necessary
         driver = webdriver.Chrome(service=service, options=options)
 
         # Access NEPSE Live Market page
         url = "https://nepsealpha.com/live-market"
         driver.get(url)
 
-        # Allow time for the page to load
-        time.sleep(5)
-
-        # Scrape required data
+        # Wait for elements to load
+        wait = WebDriverWait(driver, 10)
         data = {
-            'Date': driver.find_element(By.ID, "marketDate").text,
-            'Current': driver.find_element(By.ID, "marketCurrent").text,
-            'Daily Gain': driver.find_element(By.ID, "dailyGain").text,
-            'Turnover': driver.find_element(By.ID, "marketTurnover").text,
-            'Previous Close': driver.find_element(By.ID, "previousClose").text,
-            'Positive Stock': driver.find_element(By.ID, "positiveStock").text,
-            'Neutral Stock': driver.find_element(By.ID, "neutralStock").text,
-            'Negative Stock': driver.find_element(By.ID, "negativeStock").text,
+            'Date': wait.until(EC.presence_of_element_located((By.ID, "marketDate"))).text,
+            'Current': wait.until(EC.presence_of_element_located((By.ID, "marketCurrent"))).text,
+            'Daily Gain': wait.until(EC.presence_of_element_located((By.ID, "dailyGain"))).text,
+            'Turnover': wait.until(EC.presence_of_element_located((By.ID, "marketTurnover"))).text,
+            'Previous Close': wait.until(EC.presence_of_element_located((By.ID, "previousClose"))).text,
+            'Positive Stock': wait.until(EC.presence_of_element_located((By.ID, "positiveStock"))).text,
+            'Neutral Stock': wait.until(EC.presence_of_element_located((By.ID, "neutralStock"))).text,
+            'Negative Stock': wait.until(EC.presence_of_element_located((By.ID, "negativeStock"))).text,
         }
 
         driver.quit()
@@ -60,6 +61,7 @@ def scrape_nepse_data():
         return data
     except Exception as e:
         logging.error(f"Error in scraping NEPSE data: {e}")
+        logging.error(traceback.format_exc())
         return None
 
 # Function to generate HTML content
@@ -99,6 +101,7 @@ def upload_to_ftp(html_content):
         logging.info("Successfully uploaded data to FTP server.")
     except Exception as e:
         logging.error(f"Error uploading to FTP: {e}")
+        logging.error(traceback.format_exc())
 
 # Function to refresh data
 def refresh_data():
@@ -113,12 +116,10 @@ def refresh_data():
 # Flask route
 @app.route("/")
 def home():
-    return "NEPSE scraper is running!"
+    return jsonify({"status": "running", "message": "NEPSE scraper is running!"})
 
 # Main function
 if __name__ == "__main__":
-    from apscheduler.schedulers.background import BackgroundScheduler
-
     # Scheduler to refresh data
     scheduler = BackgroundScheduler()
     scheduler.add_job(refresh_data, "interval", minutes=REFRESH_INTERVAL)
