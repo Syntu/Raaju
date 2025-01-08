@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import ftplib
 import os
 import logging
@@ -26,41 +27,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Flask app initialization
 app = Flask(__name__)
 
+# Function to create WebDriver for Selenium
+def create_webdriver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Headless mode for server
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+
+    # Use ChromeDriverManager to automatically download the driver
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    return driver
+
 # Function to scrape NEPSE data using Selenium
 def scrape_nepse_data():
     try:
-        # Set up Chrome options for headless browsing
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        
-        # ChromeDriver path
-        service = Service('/usr/local/bin/chromedriver')  # Update this path if necessary
-        driver = webdriver.Chrome(service=service, options=options)
-
-        # Access NEPSE Live Market page
-        url = "https://nepsealpha.com/live-market"
-        driver.get(url)
+        driver = create_webdriver()
+        URL = "https://www.sharesansar.com/stock-heat-map/volume"
+        driver.get(URL)
 
         # Wait for elements to load
         wait = WebDriverWait(driver, 10)
-        data = {
-            'Date': wait.until(EC.presence_of_element_located((By.ID, "marketDate"))).text,
-            'Current': wait.until(EC.presence_of_element_located((By.ID, "marketCurrent"))).text,
-            'Daily Gain': wait.until(EC.presence_of_element_located((By.ID, "dailyGain"))).text,
-            'Turnover': wait.until(EC.presence_of_element_located((By.ID, "marketTurnover"))).text,
-            'Previous Close': wait.until(EC.presence_of_element_located((By.ID, "previousClose"))).text,
-            'Positive Stock': wait.until(EC.presence_of_element_located((By.ID, "positiveStock"))).text,
-            'Neutral Stock': wait.until(EC.presence_of_element_located((By.ID, "neutralStock"))).text,
-            'Negative Stock': wait.until(EC.presence_of_element_located((By.ID, "negativeStock"))).text,
-        }
+        nepse_index = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "nepse-index-value"))).text
+        as_of = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "date-as-of"))).text
 
         driver.quit()
-        logging.info(f"Scraped Data: {data}")
-        return data
+        return {"nepse_index": nepse_index, "as_of": as_of}
     except Exception as e:
-        logging.error(f"Error in scraping NEPSE data: {e}")
+        logging.error(f"Error scraping NEPSE data: {e}")
         logging.error(traceback.format_exc())
         return None
 
@@ -70,17 +64,9 @@ def generate_html(data):
     <html>
     <head><title>NEPSE Data</title></head>
     <body>
-        <h1>NEPSE Live Data</h1>
-        <ul>
-            <li>Date: {data.get('Date', 'N/A')}</li>
-            <li>Current: {data.get('Current', 'N/A')}</li>
-            <li>Daily Gain: {data.get('Daily Gain', 'N/A')}</li>
-            <li>Turnover: {data.get('Turnover', 'N/A')}</li>
-            <li>Previous Close: {data.get('Previous Close', 'N/A')}</li>
-            <li>Positive Stock: {data.get('Positive Stock', 'N/A')}</li>
-            <li>Neutral Stock: {data.get('Neutral Stock', 'N/A')}</li>
-            <li>Negative Stock: {data.get('Negative Stock', 'N/A')}</li>
-        </ul>
+        <h1>NEPSE Data</h1>
+        <p><strong>NEPSE Index:</strong> {data['nepse_index']}</p>
+        <p><strong>As of:</strong> {data['as_of']}</p>
     </body>
     </html>
     """
@@ -89,13 +75,11 @@ def generate_html(data):
 # Function to upload HTML to FTP server
 def upload_to_ftp(html_content):
     try:
-        # Save HTML content to file
         with open("index.html", "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # Connect to FTP server and upload file
         with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")  # Change to your desired directory
+            ftp.cwd("/htdocs")  # FTP path, modify if necessary
             with open("index.html", "rb") as f:
                 ftp.storbinary("STOR index.html", f)
         logging.info("Successfully uploaded data to FTP server.")
@@ -120,7 +104,6 @@ def home():
 
 # Main function
 if __name__ == "__main__":
-    # Scheduler to refresh data
     scheduler = BackgroundScheduler()
     scheduler.add_job(refresh_data, "interval", minutes=REFRESH_INTERVAL)
     scheduler.start()
