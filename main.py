@@ -33,8 +33,8 @@ def create_webdriver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.binary_location = "/usr/bin/chromium"  # Set Chromium binary path
 
-    # Use ChromeDriverManager to automatically download the driver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    # Use ChromeDriverManager to automatically download the correct driver version
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager(version="131.0.6778.204").install()), options=chrome_options)
     return driver
 
 # Function to scrape NEPSE data using Selenium
