@@ -12,6 +12,9 @@ RUN apt-get update \
     chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
+# Install webdriver-manager
+RUN pip install webdriver-manager
+
 # Set the working directory
 WORKDIR /app
 
