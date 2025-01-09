@@ -21,7 +21,7 @@ PORT = int(os.getenv("PORT", 5000))
 def scrape_live_trading():
     url = "https://www.nepalstock.com/"
     headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, verify=False)
     soup = BeautifulSoup(response.content, "html.parser")
 
     # Extract main table containing data
