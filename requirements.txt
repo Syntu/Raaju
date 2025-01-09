@@ -9,3 +9,4 @@ webdriver-manager
 ChromeDriver
 gunicorn
 playwright
+uvicorn
