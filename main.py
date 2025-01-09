@@ -3,9 +3,10 @@ import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
 from datetime import datetime
-from flask import Flask
-from playwright.sync_api import sync_playwright
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -16,58 +17,38 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to fetch data using Playwright
-def fetch_nepsealpha_data():
-    data = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        url = "https://nepsealpha.com/live-market"
-        page.goto(url)
-        page.wait_for_selector('tr[data-v-dfae8c1a=""]')
+# Function to scrape live trading data
+def scrape_live_trading():
+    url = "https://www.nepalstock.com/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.content, "html.parser")
 
-        rows = page.query_selector_all('tr[data-v-dfae8c1a=""]')
-        for row in rows:
-            columns = row.query_selector_all('td')
-            if len(columns) == 2:
-                key = columns[0].inner_text().strip()
-                value = columns[1].inner_text().strip()
-                data[key] = value
-
-        browser.close()
-    return data
+    # Extract main table containing data
+    main_table = soup.find("table", {"class": "table table-hover live-trading"})
+    return main_table
 
 # Function to generate HTML
-def generate_html(data):
-    html_content = """
+def generate_html(main_table):
+    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NEPSE Data</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f4f4f4; }
-        </style>
+        <title>Live NEPSE Data</title>
     </head>
     <body>
-        <h1>NEPSE Live Data</h1>
-        <table>
-            <tr><th>Key</th><th>Value</th></tr>
-    """
-    for key, value in data.items():
-        html_content += f"<tr><td>{key}</td><td>{value}</td></tr>"
-    html_content += """
-        </table>
+        <h1>Live Trading Data</h1>
+        <p>Updated at: {updated_time} (Nepal Time)</p>
+        <div>{main_table}</div>
     </body>
     </html>
     """
-    return html_content
+    return html
 
-# Upload HTML to FTP
+# Upload to FTP
 def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
@@ -79,25 +60,23 @@ def upload_to_ftp(html_content):
 # Refresh Data
 def refresh_data():
     try:
-        data = fetch_nepsealpha_data()
-        html_content = generate_html(data)
-        upload_to_ftp(html_content)
-        print(f"[{datetime.now()}] Data refreshed and uploaded successfully!")
+        live_data = scrape_live_trading()
+        if live_data:
+            html_content = generate_html(live_data)
+            upload_to_ftp(html_content)
+            print("Data refreshed and uploaded successfully.")
+        else:
+            print("Failed to scrape live data.")
     except Exception as e:
-        print(f"[{datetime.now()}] Error refreshing data: {e}")
+        print(f"Error occurred: {e}")
 
 # Scheduler
-scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
-scheduler.add_job(refresh_data, "cron", hour=4, minute=0)
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_data, "interval", minutes=5)
 scheduler.start()
 
 # Initial Data Refresh
 refresh_data()
-
-# Flask Route
-@app.route("/")
-def home():
-    return "NEPSE Data Scraper is running!"
 
 # Keep Running
 if __name__ == "__main__":
