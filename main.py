@@ -109,11 +109,53 @@ def generate_html(main_table):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            /* CSS Styles (unchanged) */
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background-color: #f4f4f4;
+            }}
+            h1 {{
+                text-align: center;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                border: 1px solid #ddd;
+                background-color: #fff;
+            }}
+            th, td {{
+                padding: 10px;
+                text-align: center;
+                border: 1px solid #ddd;
+            }}
+            th {{
+                background-color: #f2f2f2;
+            }}
+            .light-red {{
+                background-color: #f8d7da;
+            }}
+            .light-green {{
+                background-color: #d4edda;
+            }}
+            .light-blue {{
+                background-color: #cce5ff;
+            }}
+            .updated-time {{
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 20px;
+            }}
+            .search-container {{
+                margin-bottom: 20px;
+                text-align: center;
+            }}
+            .search-container input {{
+                padding: 10px;
+                width: 50%;
+                font-size: 16px;
+            }}
         </style>
-        <script>
-            /* JavaScript functions (unchanged) */
-        </script>
     </head>
     <body>
         <h1>NEPSE Data Table</h1>
@@ -132,42 +174,52 @@ def generate_html(main_table):
                 <thead>
                     <tr>
                         <th>SN</th>
-                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
-                        <th onclick="sortTable(2)">LTP</th>
-                        <th onclick="sortTable(3)">Change%</th>
-                        <th onclick="sortTable(4)">Day High</th>
-                        <th onclick="sortTable(5)">Day Low</th>
-                        <th onclick="sortTable(6)">Previous Close</th>
-                        <th onclick="sortTable(7)">Volume</th>
-                        <th onclick="sortTable(8)">Turnover</th>
-                        <th onclick="sortTable(9)">52 Week High</th>
-                        <th onclick="sortTable(10)">52 Week Low</th>
-                        <th onclick="sortTable(11)">Listed Share</th>
-                        <th onclick="sortTable(12)">Public Share</th>
-                        <th onclick="sortTable(13)">Market Cap</th>
-                        <th onclick="sortTable(14)">Paid Up Cap</th>
-                        <th onclick="sortTable(15)">Float Cap</th>
-                        <th onclick="sortTable(16)">EPS</th>
-                        <th onclick="sortTable(17)">Book Value</th>
-                        <th onclick="sortTable(18)">Down From High (%)</th>
-                        <th onclick="sortTable(19)">Up From Low (%)</th>
+                        <th class="symbol">Symbol</th>
+                        <th>LTP</th>
+                        <th>Change%</th>
+                        <th>Day High</th>
+                        <th>Day Low</th>
+                        <th>Previous Close</th>
+                        <th>Volume</th>
+                        <th>Listed Share</th>
+                        <th>Public Share</th>
+                        <th>Market Cap</th>
+                        <th>Paid Up Cap</th>
+                        <th>Float Cap</th>
+                        <th>EPS</th>
+                        <th>Book Value</th>
+                        <th>52 Week High</th>
+                        <th>52 Week Low</th>
+                        <th>Down From High (%)</th>
+                        <th>Up From Low (%)</th>
                     </tr>
                 </thead>
                 <tbody>
     """
-    for row in main_table:
+    for index, row in enumerate(main_table, start=1):
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["Symbol"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Listed Share"]}</td><td>{row["Public Share"]}</td><td>{row["Market Cap"]}</td>
-                <td>{row["Paid Up Cap"]}</td><td>{row["Float Cap"]}</td><td>{row["EPS"]}</td>
-                <td>{row["Book Value"]}</td><td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
+                <td>{index}</td>
+                <td class="symbol {change_class}">{row["Symbol"]}</td>
+                <td>{row["LTP"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td>
+                <td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td>
+                <td>{row["Previous Close"]}</td>
+                <td>{row["Volume"]}</td>
+                <td>{row["Listed Share"]}</td>
+                <td>{row["Public Share"]}</td>
+                <td>{row["Market Cap"]}</td>
+                <td>{row["Paid Up Cap"]}</td>
+                <td>{row["Float Cap"]}</td>
+                <td>{row["EPS"]}</td>
+                <td>{row["Book Value"]}</td>
+                <td>{row["52 Week High"]}</td>
+                <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
     html += """
