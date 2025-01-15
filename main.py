@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, render_template_string
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -38,6 +38,7 @@ def scrape_live_trading():
             })
     return data
 
+# Function to scrape listed security data
 def scrape_listed_security():
     url = "https://sharehubnepal.com/nepse/listed-securities"
     response = requests.get(url)
